@@ -93,9 +93,15 @@ def get_data(args):
         for i in range(targets.shape[1]):
             print(i, np.unique(targets[:, i]))
         print("targets", targets.shape, targets.dtype)
-
+    # 1. implement simpclr strengths
+    # 2. implement diet with several augs
+    # 3. implement validation in target variable
+    # 4. impelement validation in target variable plus noise
+    trans = 1
     train_data = TensorDataset(
-        torch.tensor(images[train_ind]), torch.tensor(targets[train_ind])
+        torch.tensor(images[train_ind]),
+        torch.tensor(targets[train_ind]),
+        transform=trans,
     )
     val_data = TensorDataset(
         torch.tensor(images[val_ind]), torch.tensor(targets[val_ind])

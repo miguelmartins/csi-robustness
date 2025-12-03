@@ -5,6 +5,7 @@ import torch
 from torch import nn
 from torchvision.models import resnet18
 from torch.utils.data import Dataset, DataLoader, TensorDataset
+from torchvision.transforms import transforms
 
 import sys
 import os
@@ -28,6 +29,121 @@ SAVE_PATH = "./results"
 DATASETS = ["dsprites", "shapes3d", "mpi3d", "mpi3d_real", "cars3d", "smallnorb"]
 
 
+class AddLinfNoise:
+    """
+    Add uniform L∞-bounded noise to an image tensor (C,H,W) in [0,1].
+    """
+
+    def __init__(
+        self,
+        eps=8 / 255,
+        p=1.0,
+        clip=(0.0, 1.0),
+        same_for_all_channels=False,
+        generator=None,
+    ):
+        """
+        eps: max per-pixel magnitude (in [0,1] scale). e.g., 8/255 for CIFAR-10.
+        p: probability to apply the noise (use <1.0 to sometimes skip).
+        clip: min/max clamp after adding noise.
+        same_for_all_channels: if True, one noise map shared across channels.
+        generator: optional torch.Generator for reproducibility.
+        """
+        self.eps = float(eps)
+        self.p = float(p)
+        self.clip = clip
+        self.same_for_all_channels = same_for_all_channels
+        self.generator = generator
+
+    @torch.no_grad()  # remove if you want gradient through the noise sampling
+    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+        # x is expected to be float tensor in [0,1], shape (C,H,W)
+        if self.p < 1.0 and torch.rand((), generator=self.generator) > self.p:
+            return x
+        if self.same_for_all_channels:
+            noise = torch.empty(1, x.shape[-2], x.shape[-1], device=x.device).uniform_(
+                -self.eps, self.eps, generator=self.generator
+            )
+            noise = noise.expand_as(x)
+        else:
+            noise = torch.empty_like(x).uniform_(
+                -self.eps, self.eps, generator=self.generator
+            )
+        x_noisy = x + noise
+        return x_noisy.clamp(*self.clip)
+
+
+def get_transformations_train(aug):
+    def get_color_distortion(s=0.5):  # 0.5 for CIFAR10 by default
+        # s is the strength of color distortion
+        color_jitter = transforms.ColorJitter(0.8 * s, 0.8 * s, 0.8 * s, 0.2 * s)
+        rnd_color_jitter = transforms.RandomApply([color_jitter], p=0.8)
+        rnd_gray = transforms.RandomGrayscale(p=0.2)
+        color_distort = transforms.Compose([rnd_color_jitter, rnd_gray])
+        return color_distort
+
+    def stronger_distortion():
+        # Check Fig. 10 of https://arxiv.org/pdf/2203.13457
+        color_jitter = transforms.ColorJitter(1.0, 1.0, 1.0, 0.5)
+        rnd_color_jitter = transforms.RandomApply([color_jitter], p=0.8)
+        rnd_gray = transforms.RandomGrayscale(p=0.2)
+        color_distort = transforms.Compose([rnd_color_jitter, rnd_gray])
+        return color_distort
+
+    normalize = transforms.Normalize(mean=0.0, std=1.0)
+    if aug == "none":
+        pre_transform = transforms.ToTensor()
+    elif aug == "crop":
+        pre_transform = transforms.Compose(
+            [
+                transforms.RandomCrop(32),
+                transforms.ToTensor(),
+            ]
+        )
+    elif aug == "sup":
+        pre_transform = transforms.Compose(
+            [
+                transforms.RandomCrop(32),
+                transforms.RandomHorizontalFlip(),
+                transforms.ToTensor(),
+            ]
+        )
+    elif aug == "simclr":
+        pre_transform = transforms.Compose(
+            [
+                transforms.RandomResizedCrop(32),
+                transforms.RandomHorizontalFlip(p=0.5),
+                get_color_distortion(s=0.5),
+                transforms.ToTensor(),
+            ]
+        )
+    elif aug == "simclr2":
+        pre_transform = transforms.Compose(
+            [
+                transforms.RandomResizedCrop(32),
+                transforms.RandomHorizontalFlip(p=0.5),
+                get_color_distortion(s=1),
+                transforms.ToTensor(),
+            ]
+        )
+    elif aug == "simclr3":
+        pre_transform = transforms.Compose(
+            [
+                transforms.RandomResizedCrop(32),
+                transforms.RandomHorizontalFlip(p=0.5),
+                stronger_distortion(),
+                transforms.ToTensor(),
+            ]
+        )
+    base_transform = transforms.Compose([])
+    base_transform.transforms.append(transforms.ToTensor())
+    base_transform.transforms.append(normalize)
+    adversarial_transform = transforms.Compose(
+        [transforms.ToTensor(), AddLinfNoise(), normalize]
+    )
+    return pre_transform, base_transform, adversarial_transform
+
+
 def get_data(args):
     print("Loading:", args.dataset)
     if args.dataset == "dsprites":
@@ -48,30 +164,25 @@ def get_data(args):
         print("Target", cat, cat_ind)
 
     # split train, val, test
-    val_ratio = 0.1
-    test_ratio = 0.1
+    test_ratio = 0.2
     N = data.imgs.shape[0]
     if args.debug:
         print("Total Data", N)
-    num_val = int(N * val_ratio)
     num_test = int(N * test_ratio)
-    num_train = N - num_val - num_test
+    num_train = N - num_test
 
     np.random.seed(args.seed)
     indices = np.random.choice(N, N, replace=False)
-    val_ind = indices[:num_val]
-    test_ind = indices[num_val : num_val + num_test]
-    train_ind = indices[num_val + num_test :]
+    test_ind = indices[num_train:]
+    train_ind = indices[:num_train]
     if args.debug:
         print(
-            "num_val",
-            len(val_ind),
             "num_test",
             len(test_ind),
             "num_train",
             len(train_ind),
             "sum",
-            len(val_ind) + len(test_ind) + len(train_ind),
+            len(test_ind) + len(train_ind),
         )
 
     images = data.imgs.copy()
@@ -80,32 +191,42 @@ def get_data(args):
     else:
         if images.shape[-1] == 3:
             images = np.transpose(images, (0, 3, 1, 2))
-    images = images / 255.0
+    # images = images / 255.0
     if args.debug:
         print("images", images.shape, images.dtype)
-
     targets = data.lat_values.copy()
     for i in range(targets.shape[1]):
         tmp = np.unique(targets[:, i])
         targets[:, i] /= tmp[1]
     targets = targets.astype(int)
+
     if args.debug:
         for i in range(targets.shape[1]):
+            if i == cat_ind:
+                print(f"cat_ind, {i}")
             print(i, np.unique(targets[:, i]))
         print("targets", targets.shape, targets.dtype)
-
-    train_data = TensorDataset(
-        torch.tensor(images[train_ind]), torch.tensor(targets[train_ind])
+        print(targets)
+    train, base = get_transformations_train(aug="none")
+    train_data = DislibDataset(
+        images[train_ind],
+        targets[train_ind],
+        transform=base,
     )
-    val_data = TensorDataset(
-        torch.tensor(images[val_ind]), torch.tensor(targets[val_ind])
+    train_data_diet = DietDataset(
+        train_data,
+        transform=base,
     )
-    test_data = TensorDataset(
-        torch.tensor(images[test_ind]), torch.tensor(targets[test_ind])
+    test_data = DislibDataset(
+        images[test_ind],
+        targets[test_ind],
+        transform=base,
     )
 
     train_dataloader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True)
-    val_dataloader = DataLoader(val_data, batch_size=args.batch_size, shuffle=False)
+    train_diet_dataloader = DataLoader(
+        train_data_diet, batch_size=args.batch_size, shuffle=True
+    )
     test_dataloader = DataLoader(test_data, batch_size=args.batch_size, shuffle=False)
 
     if args.dataset == "cars3d":
@@ -116,7 +237,7 @@ def get_data(args):
 
     return (
         train_dataloader,
-        val_dataloader,
+        # train_diet_dataloader,
         test_dataloader,
         data,
         out_size,
@@ -169,6 +290,42 @@ num_channels = {
 }
 
 
+class DietDataset(torch.utils.data.Dataset):
+    def __init__(self, dataset, transform=None):
+        self.dataset = dataset
+        self.transform = transform
+
+    def __getitem__(self, idx):
+        x, _ = self.dataset[idx]
+        if self.transform is not None:
+            x = self.transform(x)
+        return x, idx
+
+    def __len__(self):
+        return len(self.dataset)
+
+
+class DislibDataset(torch.utils.data.Dataset):
+    def __init__(self, images, labels, transform=None) -> None:
+        super().__init__()
+        self.images = images
+        self.labels = labels
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.images)
+
+    def __getitem__(self, idx):
+        x = self.images[idx]
+        y = torch.tensor(self.labels[idx])
+
+        if self.transform is not None:
+            x = self.transform(x)
+        else:
+            x = torch.tensor(x)
+        return x, y
+
+
 def get_model(model, nc, out_size, seed):
     torch.manual_seed(seed)
     if model == "image":
@@ -211,9 +368,7 @@ def LinReg(X, Y):
 def train(args, dataset, log_file):
     with open(log_file, "a") as file:
         print("\n\nTraining:", file=file)
-    (train_dataloader, val_dataloader, test_dataloader, data, out_size, nc, cat_ind) = (
-        dataset
-    )
+    (train_dataloader, test_dataloader, data, out_size, nc, cat_ind) = dataset
     net = get_model(args.model, nc, out_size, args.seed)
     readout = nn.Linear(512, out_size).to(device)
 
@@ -239,6 +394,7 @@ def train(args, dataset, log_file):
             if args.debug:
                 print("y", y.shape, y.dtype, y.min(), y.max(), y)
                 print("y_", y_.shape, y_.dtype, y_.min(), y_.max(), y_)
+                print("y_cat", y[:, cat_ind])
             loss = criterion(y_, y[:, cat_ind].to(device))
             optimizer.zero_grad()
             loss.backward()
@@ -249,54 +405,14 @@ def train(args, dataset, log_file):
                 break
 
         net.eval()
-        Y, Z, Y_ = [], [], []
-        with torch.no_grad():
-            for i, (x, y) in enumerate(val_dataloader):
-                x = x.to(torch.float32).to(device)
-                z = net(x)
-                y_ = readout(z)
-                Y.append(y.to(torch.long).detach().cpu().numpy())
-                Y_.append(y_.argmax(1).detach().cpu().numpy())
-                Z.append(z.detach().cpu().numpy())
-                if args.debug:
-                    break
-        Y = np.concatenate(Y)
-        Y_ = np.concatenate(Y_)
-        Z = np.concatenate(Z)
-        val_acc = np.mean(Y[:, cat_ind] == Y_)
-        print("val_acc", val_acc)
-        Y_ = LinReg(Z, Y)
-        with open(log_file, "a") as file:
-            for i in range(Y.shape[1]):
-                print(
-                    "Coordinate",
-                    i,
-                    data.lat_names[i],
-                    corr(Y[:, i], Y_[:, i])[0],
-                    file=file,
-                )
-        with open(log_file, "a") as file:
-            print(
-                "Epoch", epoch, "Loss", np.mean(run_loss), "val_acc", val_acc, file=file
-            )
-        if val_acc > best_val_acc:
-            best_val_acc = val_acc
-            torch.save(net.state_dict(), os.path.join(args.log_dir, "model.pth"))
-            torch.save(readout.state_dict(), os.path.join(args.log_dir, "readout.pth"))
-        if args.debug:
-            break
-        if best_val_acc > 0.999:
-            with open(log_file, "a") as file:
-                print("early stopping", file=file)
-            break
+        torch.save(net.state_dict(), os.path.join(args.log_dir, "model.pth"))
+        torch.save(readout.state_dict(), os.path.join(args.log_dir, "readout.pth"))
 
 
 def evaluate(args, dataset, log_file):
     with open(log_file, "a") as file:
         print("\n\nEvaluating:", file=file)
-    (train_dataloader, val_dataloader, test_dataloader, data, out_size, nc, cat_ind) = (
-        dataset
-    )
+    (train_dataloader, val_dataloader, data, out_size, nc, cat_ind) = dataset
     net = get_model(args.model, nc, out_size, args.seed)
 
     # prepare model
@@ -400,8 +516,11 @@ if __name__ == "__main__":
     args.seed = SEED + rep
     args.dataset = dataset
     args.model = model
-    args.log_dir = os.path.join(SAVE_PATH, "%s_model_%s_rep_%s" % (dataset, model, rep))
+    args.log_dir = os.path.join(
+        SAVE_PATH, "diet_%s_model_%s_rep_%s" % (dataset, model, rep)
+    )
 
+    args.num_epochs = 20
     log_file = setup_logging(args)
     dataset = get_data(args)
     if model != "image":
