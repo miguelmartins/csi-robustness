@@ -207,7 +207,8 @@ def get_data(args):
             print(i, np.unique(targets[:, i]))
         print("targets", targets.shape, targets.dtype)
         print(targets)
-    train, base = get_transformations_train(aug="none")
+    train, base, adversarial = get_transformations_train(aug="none")
+
     train_data = DislibDataset(
         images[train_ind],
         targets[train_ind],
@@ -222,12 +223,20 @@ def get_data(args):
         targets[test_ind],
         transform=base,
     )
+    adv_test_data = DislibDataset(
+        images[test_ind],
+        targets[test_ind],
+        transform=adversarial,
+    )
 
     train_dataloader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True)
     train_diet_dataloader = DataLoader(
         train_data_diet, batch_size=args.batch_size, shuffle=True
     )
     test_dataloader = DataLoader(test_data, batch_size=args.batch_size, shuffle=False)
+    adv_test_dataloader = DataLoader(
+        adv_test_data, batch_size=args.batch_size, shuffle=False
+    )
 
     if args.dataset == "cars3d":
         # missing classes in cars3d
@@ -239,6 +248,7 @@ def get_data(args):
         train_dataloader,
         # train_diet_dataloader,
         test_dataloader,
+        adv_test_dataloader,
         data,
         out_size,
         nc,
@@ -365,10 +375,58 @@ def LinReg(X, Y):
     return X @ beta
 
 
+def log_val(data, net, readout, cat_ind, epoch, run_loss, dataloader, name="val"):
+    Y, Z, Y_ = [], [], []
+    with torch.no_grad():
+        for i, (x, y) in enumerate(dataloader):
+            x = x.to(torch.float32).to(device)
+            z = net(x)
+            y_ = readout(z)
+            Y.append(y.to(torch.long).detach().cpu().numpy())
+            Y_.append(y_.argmax(1).detach().cpu().numpy())
+            Z.append(z.detach().cpu().numpy())
+            if args.debug:
+                break
+    Y = np.concatenate(Y)
+    Y_ = np.concatenate(Y_)
+    Z = np.concatenate(Z)
+    val_acc = np.mean(Y[:, cat_ind] == Y_)
+    print(f"{name}_acc", val_acc)
+    Y_ = LinReg(Z, Y)
+    with open(log_file, "a") as file:
+        for i in range(Y.shape[1]):
+            print(
+                "Coordinate",
+                i,
+                data.lat_names[i],
+                corr(Y[:, i], Y_[:, i])[0],
+                file=file,
+            )
+    with open(log_file, "a") as file:
+        print(
+            name,
+            " Epoch",
+            epoch,
+            "Loss",
+            np.mean(run_loss),
+            "val_acc",
+            val_acc,
+            file=file,
+        )
+
+
 def train(args, dataset, log_file):
     with open(log_file, "a") as file:
         print("\n\nTraining:", file=file)
-    (train_dataloader, test_dataloader, data, out_size, nc, cat_ind) = dataset
+    (
+        train_dataloader,
+        test_dataloader,
+        adv_test_dataloader,
+        data,
+        out_size,
+        nc,
+        cat_ind,
+    ) = dataset
     net = get_model(args.model, nc, out_size, args.seed)
     readout = nn.Linear(512, out_size).to(device)
 
@@ -401,10 +459,22 @@ def train(args, dataset, log_file):
             optimizer.step()
             run_loss.append(loss.item())
             progress_bar.set_postfix(loss=np.mean(run_loss))
-            if args.debug:
-                break
 
         net.eval()
+        log_val(
+            data, net, readout, cat_ind, epoch, run_loss, test_dataloader, name="val"
+        )
+        log_val(
+            data,
+            net,
+            readout,
+            cat_ind,
+            epoch,
+            run_loss,
+            adv_test_dataloader,
+            name="adv",
+        )
+
         torch.save(net.state_dict(), os.path.join(args.log_dir, "model.pth"))
         torch.save(readout.state_dict(), os.path.join(args.log_dir, "readout.pth"))
 
