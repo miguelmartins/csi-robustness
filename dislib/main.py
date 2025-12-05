@@ -97,7 +97,6 @@ def get_data(args):
     # 2. implement diet with several augs
     # 3. implement validation in target variable
     # 4. impelement validation in target variable plus noise
-    trans = 1
     train_data = TensorDataset(
         torch.tensor(images[train_ind]),
         torch.tensor(targets[train_ind]),

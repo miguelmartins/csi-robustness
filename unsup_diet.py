@@ -1,4 +1,5 @@
 import numpy as np
+import math
 from scipy.stats import pearsonr as corr
 
 import torch
@@ -27,6 +28,34 @@ SAVE_PATH = "./results"
 
 
 DATASETS = ["dsprites", "shapes3d", "mpi3d", "mpi3d_real", "cars3d", "smallnorb"]
+
+from torch.optim import AdamW
+from torch.optim.lr_scheduler import LambdaLR
+
+
+def build_optimizer_and_scheduler(model, total_epochs, is_transformer=False):
+    if is_transformer:
+        lr = 2e-4
+        wd = 0.01
+    else:
+        lr = 1e-3
+        wd = 0.05
+    params = [p for m in model for p in m.parameters()]
+    optimizer = AdamW(params, lr=lr, weight_decay=wd)
+
+    WARMUP_EPOCHS = 10
+
+    def lr_lambda(epoch):
+        if epoch < WARMUP_EPOCHS:
+            # linear warmup
+            return float(epoch + 1) / WARMUP_EPOCHS
+        else:
+            # cosine
+            progress = (epoch - WARMUP_EPOCHS) / max(1, total_epochs - WARMUP_EPOCHS)
+            return 0.5 * (1 + math.cos(math.pi * progress))
+
+    scheduler = LambdaLR(optimizer, lr_lambda)
+    return optimizer, scheduler
 
 
 class AddLinfNoise:
@@ -141,6 +170,9 @@ def get_transformations_train(aug):
     return pre_transform, base_transform, adversarial_transform
 
 
+TRAIN_LEN = 0
+
+
 def get_data(args):
     print("Loading:", args.dataset)
     if args.dataset == "dsprites":
@@ -211,10 +243,7 @@ def get_data(args):
         targets[train_ind],
         transform=train,
     )
-    train_data_diet = DietDataset(
-        train_data,
-        transform=base,
-    )
+    train_data_diet = DietDataset(train_data, transform=train)
     test_data = DislibDataset(
         images[test_ind],
         targets[test_ind],
@@ -240,10 +269,10 @@ def get_data(args):
         out_size = 183
     else:
         out_size = len(np.unique(targets[:, cat_ind]))
-
+    TRAIN_LEN = len(train_ind)
     return (
         train_dataloader,
-        # train_diet_dataloader,
+        train_diet_dataloader,
         test_dataloader,
         adv_test_dataloader,
         data,
@@ -416,23 +445,25 @@ def train(args, dataset, log_file):
     with open(log_file, "a") as file:
         print("\n\nTraining:", file=file)
     (
+        _,
         train_dataloader,
         test_dataloader,
-        adv_test_dataloader,
-        data,
+        _,
+        _,
         out_size,
         nc,
         cat_ind,
     ) = dataset
-    net = get_model(args.model, nc, out_size, args.seed)
-    readout = nn.Linear(512, out_size).to(device)
-
-    optimizer = torch.optim.Adam(
-        list(net.parameters()) + list(readout.parameters()), lr=args.lr
+    net = get_model(args.model, nc, out_size, args.seed).to(device)
+    readout = nn.Linear(512, TRAIN_LEN).to(device)
+    # optimizer = torch.optim.Adam(
+    #     list(net.parameters()) + list(readout.parameters()), lr=args.lr
+    # )
+    optimizer, scheduler = build_optimizer_and_scheduler(
+        [net, readout], args.num_epochs
     )
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss(label_smoothing=0.8)
 
-    best_val_acc = 0
     for epoch in range(args.num_epochs):
         net.train()
         run_loss = []
@@ -443,48 +474,26 @@ def train(args, dataset, log_file):
         )
         for x, y in progress_bar:
             x = x.to(torch.float32).to(device)
-            y = y.to(torch.long)
+            y = y.to(torch.long).to(device)
             z = net(x)
             y_ = readout(z)
+            print(y, y_)
+            print(TRAIN_LEN)
             if args.debug:
                 print("y", y.shape, y.dtype, y.min(), y.max(), y)
                 print("y_", y_.shape, y_.dtype, y_.min(), y_.max(), y_)
                 print("y_cat", y[:, cat_ind])
-            loss = criterion(y_, y[:, cat_ind].to(device))
+            loss = criterion(y_, y)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
             run_loss.append(loss.item())
             progress_bar.set_postfix(loss=np.mean(run_loss))
+        scheduler.step()
 
-        net.eval()
-        val_acc = log_val(
-            data, net, readout, cat_ind, epoch, run_loss, test_dataloader, name="val"
-        )
-        log_val(
-            data,
-            net,
-            readout,
-            cat_ind,
-            epoch,
-            run_loss,
-            adv_test_dataloader,
-            name="adv",
-        )
-
-        net.eval()
-        if val_acc > best_val_acc:
-            best_val_acc = val_acc
-            torch.save(net.state_dict(), os.path.join(args.log_dir, "model.pth"))
-            torch.save(readout.state_dict(), os.path.join(args.log_dir, "readout.pth"))
-        if args.debug:
-            break
-        if best_val_acc > 0.999:
-            with open(log_file, "a") as file:
-                print("early stopping", file=file)
-            break
-        # torch.save(net.state_dict(), os.path.join(args.log_dir, "model.pth"))
-        # torch.save(readout.state_dict(), os.path.join(args.log_dir, "readout.pth"))
+    net.eval()
+    torch.save(net.state_dict(), os.path.join(args.log_dir, "model.pth"))
+    torch.save(readout.state_dict(), os.path.join(args.log_dir, "readout.pth"))
 
 
 def evaluate(args, dataset, log_file):
@@ -492,6 +501,7 @@ def evaluate(args, dataset, log_file):
         print("\n\nEvaluating:", file=file)
     (
         train_dataloader,
+        _,
         test_dataloader,
         adv_test_dataloader,
         data,
@@ -509,6 +519,7 @@ def evaluate(args, dataset, log_file):
         net.eval()
 
     x_train, y_train, x_val, y_val = [], [], [], []
+    x_adv, y_adv = [], []
     with torch.no_grad():
         for i, (x, y) in enumerate(train_dataloader):
             x = x.to(torch.float32).to(device)
@@ -520,12 +531,18 @@ def evaluate(args, dataset, log_file):
             x = x.to(torch.float32).to(device)
             y_val.append(y.to(torch.long).detach().cpu().numpy())
             x_val.append(net(x).detach().cpu().numpy())
+        for i, (x, y) in enumerate(adv_test_dataloader):
+            x = x.to(torch.float32).to(device)
+            y_adv.append(y.to(torch.long).detach().cpu().numpy())
+            x_adv.append(net(x).detach().cpu().numpy())
             if args.debug:
                 break
     x_train = np.concatenate(x_train)
     y_train = np.concatenate(y_train)
     x_val = np.concatenate(x_val)
     y_val = np.concatenate(y_val)
+    x_adv = np.concatenate(x_adv)
+    y_adv = np.concatenate(y_adv)
     if args.debug:
         with open(log_file, "a") as file:
             print(x_train.shape, y_train.shape, x_val.shape, y_val.shape, file=file)
@@ -539,6 +556,7 @@ def evaluate(args, dataset, log_file):
         beta = tmp @ y
         y_train_ = x_train @ beta
         y_val_ = x_val @ beta
+        y_adv_ = x_adv @ beta
         with open(log_file, "a") as file:
             print(
                 "Coordinate",
@@ -548,6 +566,8 @@ def evaluate(args, dataset, log_file):
                 corr(y_train[:, i], y_train_),
                 "\nval",
                 corr(y_val[:, i], y_val_),
+                "\nadv",
+                corr(y_adv[:, i], y_adv_),
                 file=file,
             )
 
@@ -567,10 +587,10 @@ class Args:
     def __init__(self):
         self.dataset = "dsprites"
         self.seed = SEED
-        self.batch_size = int(2**12)
+        self.batch_size = 512
         self.model = "cnn"
         self.lr = 1e-3
-        self.num_epochs = 20
+        self.num_epochs = 2
         self.log_dir = SAVE_PATH
         self.debug = False
         self.aug = "none"
@@ -610,7 +630,7 @@ if __name__ == "__main__":
         SAVE_PATH, "diet_aug_%s_%s_model_%s_rep_%s" % (aug, dataset, model, rep)
     )
 
-    args.num_epochs = 100
+    args.num_epochs = 2
     log_file = setup_logging(args)
     dataset = get_data(args)
     if model != "image":
