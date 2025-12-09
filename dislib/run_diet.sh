@@ -1,7 +1,7 @@
 #!/bin/bash
-uv run dislib/diet.py --setting 0 --aug "none"
-uv run dislib/diet.py --setting 0 --aug "crop"
-uv run dislib/diet.py --setting 0 --aug "sup"
-uv run dislib/diet.py --setting 0 --aug "simclr"
-uv run dislib/diet.py --setting 0 --aug "simclr2"
-uv run dislib/diet.py --setting 0 --aug "simclr3"
+CUDA_VISIBLE_DEVICES=0 uv run dislib/unsup_diet.py --setting 1 --aug "none"
+CUDA_VISIBLE_DEVICES=0 uv run dislib/unsup_diet.py --setting 1 --aug "crop"
+CUDA_VISIBLE_DEVICES=0 uv run dislib/unsup_diet.py --setting 1 --aug "sup"
+CUDA_VISIBLE_DEVICES=0 uv run dislib/unsup_diet.py --setting 1 --aug "simclr"
+CUDA_VISIBLE_DEVICES=0 uv run dislib/unsup_diet.py --setting 1 --aug "simclr2"
+CUDA_VISIBLE_DEVICES=0 uv run dislib/unsup_diet.py --setting 1 --aug "simclr3"

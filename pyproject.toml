@@ -8,6 +8,7 @@ dependencies = [
     "fastargs>=1.2.0",
     "imageio>=2.37.2",
     "joblib>=1.5.2",
+    "jupyterlab>=4.5.0",
     "numpy>=2.3.5",
     "pyitlib>=0.3.1",
     "pyyaml>=6.0.3",

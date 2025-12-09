@@ -603,8 +603,8 @@ if __name__ == "__main__":
     aug = parser.parse_args().aug
 
     settings = []
-    for rep in range(10):
-        for dataset in DATASETS[:]:
+    for dataset in DATASETS[:]:
+        for rep in range(10):
             for model in ["cnn"]:
                 settings.append([rep, dataset, model])
     assert setting >= 0 and setting < len(settings)
@@ -620,7 +620,7 @@ if __name__ == "__main__":
         SAVE_PATH, "diet_aug_%s_%s_model_%s_rep_%s" % (aug, dataset, model, rep)
     )
 
-    args.num_epochs = 2
+    args.num_epochs = 100
     log_file = setup_logging(args)
     dataset = get_data(args)
     if model != "image":

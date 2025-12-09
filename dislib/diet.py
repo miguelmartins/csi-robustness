@@ -593,8 +593,8 @@ if __name__ == "__main__":
     aug = parser.parse_args().aug
 
     settings = []
-    for rep in range(10):
-        for dataset in DATASETS[:]:
+    for dataset in DATASETS[:]:
+        for rep in range(10):
             for model in ["cnn"]:
                 settings.append([rep, dataset, model])
     assert setting >= 0 and setting < len(settings)
