@@ -1,5 +1,4 @@
 import numpy as np
-import math
 from scipy.stats import pearsonr as corr
 
 import torch
@@ -28,34 +27,6 @@ SAVE_PATH = "./results"
 
 
 DATASETS = ["dsprites", "shapes3d", "mpi3d", "mpi3d_real", "cars3d", "smallnorb"]
-
-from torch.optim import AdamW
-from torch.optim.lr_scheduler import LambdaLR
-
-
-def build_optimizer_and_scheduler(model, total_epochs, is_transformer=False):
-    if is_transformer:
-        lr = 2e-4
-        wd = 0.01
-    else:
-        lr = 1e-3
-        wd = 0.05
-    params = [p for m in model for p in m.parameters()]
-    optimizer = AdamW(params, lr=lr, weight_decay=wd)
-
-    WARMUP_EPOCHS = 10
-
-    def lr_lambda(epoch):
-        if epoch < WARMUP_EPOCHS:
-            # linear warmup
-            return float(epoch + 1) / WARMUP_EPOCHS
-        else:
-            # cosine
-            progress = (epoch - WARMUP_EPOCHS) / max(1, total_epochs - WARMUP_EPOCHS)
-            return 0.5 * (1 + math.cos(math.pi * progress))
-
-    scheduler = LambdaLR(optimizer, lr_lambda)
-    return optimizer, scheduler
 
 
 class AddLinfNoise:
@@ -166,64 +137,8 @@ def get_transformations_train(aug):
                 transforms.Normalize(mean=0.0, std=1.0),
             ]
         )
-    elif aug == "geom":
-        # Example usage:
-        train_transform = dsprites_similarity_aug(
-            out_size=64,
-            max_translate_frac=0.30,
-            max_rotate_deg=180.0,
-            scale_range=(0.7, 1.3),
-            use_reflection=True,  # set True if you want reflection invariance
-        )
-        pre_transform = transforms.Compose([train_transform, normalize])
     adversarial_transform = transforms.Compose([AddLinfNoise(), normalize])
     return pre_transform, base_transform, adversarial_transform
-
-
-import torch
-from torchvision.transforms import v2 as T
-from torchvision.transforms.v2 import InterpolationMode
-
-
-def dsprites_similarity_aug(
-    out_size: int = 64,
-    max_translate_frac: float = 0.25,  # fraction of image size
-    max_rotate_deg: float = 180.0,  # sample uniformly in [-deg, +deg]
-    scale_range=(0.6, 1.4),  # isotropic scale
-    use_reflection: bool = False,
-):
-    """
-    Augmentations aligned with Sim(2): translation + rotation + isotropic scaling.
-    Designed for binary-ish dSprites silhouettes: preserve boundaries, avoid warps.
-    """
-
-    # Convert translation fraction to pixels for RandomAffine
-    max_translate_px = (max_translate_frac, max_translate_frac)
-
-    tfms = [
-        # Ensure tensor and float (v2 handles PIL/tensor; dSprites often is numpy)
-        # Key Sim(2) augmentation:
-        T.RandomAffine(
-            degrees=max_rotate_deg,
-            translate=max_translate_px,
-            scale=scale_range,
-            shear=None,  # critical: no shear (would change shape)
-            interpolation=InterpolationMode.NEAREST,  # preserves crisp edges
-            fill=0.0,  # background stays black
-        ),
-        # Guardrail: keep size consistent (RandomAffine preserves size, but safe)
-        T.Resize((out_size, out_size), interpolation=InterpolationMode.NEAREST),
-        # Optional: keep silhouettes clean and binary-like (helps if interpolation adds grays)
-        # Comment out if you want grayscale edges for antialiasing.
-        T.Lambda(lambda x: (x > 0.5).to(x.dtype)),
-    ]
-
-    if use_reflection:
-        # Reflections are a discrete extension (O(2))—optional.
-        tfms.insert(2, T.RandomHorizontalFlip(p=0.5))
-        tfms.insert(3, T.RandomVerticalFlip(p=0.5))
-
-    return T.Compose(tfms)
 
 
 def get_data(args):
@@ -296,7 +211,10 @@ def get_data(args):
         targets[train_ind],
         transform=train,
     )
-    train_data_diet = DietDataset(train_data, transform=train)
+    train_data_diet = DietDataset(
+        train_data,
+        transform=base,
+    )
     test_data = DislibDataset(
         images[test_ind],
         targets[test_ind],
@@ -308,45 +226,13 @@ def get_data(args):
         transform=adversarial,
     )
 
-    train_dataloader = DataLoader(
-        train_data,
-        batch_size=args.batch_size,
-        shuffle=True,
-        multiprocessing_context="fork",
-        prefetch_factor=4,
-        persistent_workers=True,
-        num_workers=8,
-        drop_last=True,
-    )
+    train_dataloader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True)
     train_diet_dataloader = DataLoader(
-        train_data_diet,
-        batch_size=args.batch_size,
-        shuffle=True,
-        multiprocessing_context="fork",
-        prefetch_factor=4,
-        persistent_workers=True,
-        num_workers=8,
-        drop_last=True,
+        train_data_diet, batch_size=args.batch_size, shuffle=True
     )
-    test_dataloader = DataLoader(
-        test_data,
-        batch_size=args.batch_size,
-        shuffle=False,
-        multiprocessing_context="fork",
-        prefetch_factor=4,
-        persistent_workers=True,
-        num_workers=8,
-        drop_last=False,
-    )
+    test_dataloader = DataLoader(test_data, batch_size=args.batch_size, shuffle=False)
     adv_test_dataloader = DataLoader(
-        adv_test_data,
-        batch_size=args.batch_size,
-        shuffle=False,
-        multiprocessing_context="fork",
-        prefetch_factor=4,
-        persistent_workers=True,
-        num_workers=8,
-        drop_last=False,
+        adv_test_data, batch_size=args.batch_size, shuffle=False
     )
 
     if args.dataset == "cars3d":
@@ -354,17 +240,16 @@ def get_data(args):
         out_size = 183
     else:
         out_size = len(np.unique(targets[:, cat_ind]))
-    train_len = len(train_data_diet)
+
     return (
         train_dataloader,
-        train_diet_dataloader,
+        # train_diet_dataloader,
         test_dataloader,
         adv_test_dataloader,
         data,
         out_size,
         nc,
         cat_ind,
-        train_len,
     )
 
 
@@ -530,19 +415,24 @@ def log_val(data, net, readout, cat_ind, epoch, run_loss, dataloader, name="val"
 def train(args, dataset, log_file):
     with open(log_file, "a") as file:
         print("\n\nTraining:", file=file)
-    (_, train_dataloader, test_dataloader, _, _, out_size, nc, cat_ind, train_len) = (
-        dataset
-    )
-    net = get_model(args.model, nc, out_size, args.seed).to(device)
-    readout = nn.Linear(512, train_len).to(device)
-    # optimizer = torch.optim.Adam(
-    #     list(net.parameters()) + list(readout.parameters()), lr=args.lr
-    # )
-    optimizer, scheduler = build_optimizer_and_scheduler(
-        [net, readout], args.num_epochs
-    )
-    criterion = nn.CrossEntropyLoss(label_smoothing=0.8)
+    (
+        train_dataloader,
+        test_dataloader,
+        adv_test_dataloader,
+        data,
+        out_size,
+        nc,
+        cat_ind,
+    ) = dataset
+    net = get_model(args.model, nc, out_size, args.seed)
+    readout = nn.Linear(512, out_size).to(device)
 
+    optimizer = torch.optim.Adam(
+        list(net.parameters()) + list(readout.parameters()), lr=args.lr
+    )
+    criterion = nn.CrossEntropyLoss()
+
+    best_val_acc = 0
     for epoch in range(args.num_epochs):
         net.train()
         run_loss = []
@@ -553,24 +443,48 @@ def train(args, dataset, log_file):
         )
         for x, y in progress_bar:
             x = x.to(torch.float32).to(device)
-            y = y.to(torch.long).to(device)
+            y = y.to(torch.long)
             z = net(x)
             y_ = readout(z)
             if args.debug:
                 print("y", y.shape, y.dtype, y.min(), y.max(), y)
                 print("y_", y_.shape, y_.dtype, y_.min(), y_.max(), y_)
                 print("y_cat", y[:, cat_ind])
-            loss = criterion(y_, y)
+            loss = criterion(y_, y[:, cat_ind].to(device))
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
             run_loss.append(loss.item())
             progress_bar.set_postfix(loss=np.mean(run_loss))
-        scheduler.step()
 
-    net.eval()
-    torch.save(net.state_dict(), os.path.join(args.log_dir, "model.pth"))
-    torch.save(readout.state_dict(), os.path.join(args.log_dir, "readout.pth"))
+        net.eval()
+        val_acc = log_val(
+            data, net, readout, cat_ind, epoch, run_loss, test_dataloader, name="val"
+        )
+        log_val(
+            data,
+            net,
+            readout,
+            cat_ind,
+            epoch,
+            run_loss,
+            adv_test_dataloader,
+            name="adv",
+        )
+
+        net.eval()
+        if val_acc > best_val_acc:
+            best_val_acc = val_acc
+            torch.save(net.state_dict(), os.path.join(args.log_dir, "model.pth"))
+            torch.save(readout.state_dict(), os.path.join(args.log_dir, "readout.pth"))
+        if args.debug:
+            break
+        if best_val_acc > 0.999:
+            with open(log_file, "a") as file:
+                print("early stopping", file=file)
+            break
+        # torch.save(net.state_dict(), os.path.join(args.log_dir, "model.pth"))
+        # torch.save(readout.state_dict(), os.path.join(args.log_dir, "readout.pth"))
 
 
 def evaluate(args, dataset, log_file):
@@ -578,14 +492,12 @@ def evaluate(args, dataset, log_file):
         print("\n\nEvaluating:", file=file)
     (
         train_dataloader,
-        _,
         test_dataloader,
         adv_test_dataloader,
         data,
         out_size,
         nc,
         cat_ind,
-        train_len,
     ) = dataset
     net = get_model(args.model, nc, out_size, args.seed)
 
@@ -597,7 +509,6 @@ def evaluate(args, dataset, log_file):
         net.eval()
 
     x_train, y_train, x_val, y_val = [], [], [], []
-    x_adv, y_adv = [], []
     with torch.no_grad():
         for i, (x, y) in enumerate(train_dataloader):
             x = x.to(torch.float32).to(device)
@@ -609,18 +520,12 @@ def evaluate(args, dataset, log_file):
             x = x.to(torch.float32).to(device)
             y_val.append(y.to(torch.long).detach().cpu().numpy())
             x_val.append(net(x).detach().cpu().numpy())
-        for i, (x, y) in enumerate(adv_test_dataloader):
-            x = x.to(torch.float32).to(device)
-            y_adv.append(y.to(torch.long).detach().cpu().numpy())
-            x_adv.append(net(x).detach().cpu().numpy())
             if args.debug:
                 break
     x_train = np.concatenate(x_train)
     y_train = np.concatenate(y_train)
     x_val = np.concatenate(x_val)
     y_val = np.concatenate(y_val)
-    x_adv = np.concatenate(x_adv)
-    y_adv = np.concatenate(y_adv)
     if args.debug:
         with open(log_file, "a") as file:
             print(x_train.shape, y_train.shape, x_val.shape, y_val.shape, file=file)
@@ -634,7 +539,6 @@ def evaluate(args, dataset, log_file):
         beta = tmp @ y
         y_train_ = x_train @ beta
         y_val_ = x_val @ beta
-        y_adv_ = x_adv @ beta
         with open(log_file, "a") as file:
             print(
                 "Coordinate",
@@ -644,8 +548,6 @@ def evaluate(args, dataset, log_file):
                 corr(y_train[:, i], y_train_),
                 "\nval",
                 corr(y_val[:, i], y_val_),
-                "\nadv",
-                corr(y_adv[:, i], y_adv_),
                 file=file,
             )
 
@@ -665,10 +567,10 @@ class Args:
     def __init__(self):
         self.dataset = "dsprites"
         self.seed = SEED
-        self.batch_size = 512
+        self.batch_size = int(2**12)
         self.model = "cnn"
         self.lr = 1e-3
-        self.num_epochs = 2
+        self.num_epochs = 20
         self.log_dir = SAVE_PATH
         self.debug = False
         self.aug = "none"
@@ -705,7 +607,7 @@ if __name__ == "__main__":
     args.model = model
     args.aug = aug
     args.log_dir = os.path.join(
-        SAVE_PATH, "diet_aug_%s_%s_model_%s_rep_%s" % (aug, dataset, model, rep)
+        SAVE_PATH, "supervised_aug_%s_%s_model_%s_rep_%s" % (aug, dataset, model, rep)
     )
 
     args.num_epochs = 100

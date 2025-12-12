@@ -1,8 +1,11 @@
 import numpy as np
+import math
 from scipy.stats import pearsonr as corr
 
 import torch
 from torch import nn
+from torch.optim import AdamW
+from torch.optim.lr_scheduler import LambdaLR
 from torchvision.models import resnet18
 from torch.utils.data import Dataset, DataLoader, TensorDataset
 from torchvision.transforms import transforms
@@ -29,6 +32,109 @@ SAVE_PATH = "./results"
 DATASETS = ["dsprites", "shapes3d", "mpi3d", "mpi3d_real", "cars3d", "smallnorb"]
 
 
+def linear_disentanglement(*, y_true, y_pred, y_val=None, y_pred_val=None):
+    # only solves for orthogonal case for now.
+    least_squares = torch.linalg.lstsq(y_pred, y_true)
+    r2_train = torch_r2(y_true=y_true, residuals=least_squares.residuals)
+    if len(r2_train) == 0:  # it can happen when device is mpb
+        z_hat = y_pred @ least_squares.solution
+        residuals = torch.sum((y_true - z_hat) ** 2, dim=0)
+        r2_train = torch_r2(y_true=y_true, residuals=residuals)
+
+    if y_val is None or y_pred_val is None:
+        r2_val = None
+    else:
+        z_hat_val = y_pred_val @ least_squares.solution
+        residuals = torch.sum((y_val - z_hat_val) ** 2, dim=0)
+        r2_val = torch_r2(y_true=y_val, residuals=residuals)
+    return least_squares, r2_train, r2_val
+
+
+def torch_r2(*, y_true, residuals):
+    y_mean = torch.mean(y_true, dim=0)
+    sst = torch.sum((y_true - y_mean) ** 2)
+    r2 = 1 - residuals / sst
+    return r2
+
+
+# sort latents
+categorical = {
+    "dsprites": ["shape"],
+    "shapes3d": ["objType"],
+    "mpi3d": ["objShape"],
+    "mpi3d_real": ["objShape"],
+    "cars3d": ["object_type"],
+    "smallnorb": ["category", "instance"],
+}
+continuous = {
+    "dsprites": ["scale", "posX", "posY"],
+    "shapes3d": ["objSize", "objAzimuth"],
+    "mpi3d": ["posX", "posY"],
+    "mpi3d_real": ["posX", "posY"],
+    "cars3d": ["elevation"],
+    "smallnorb": ["elevation"],
+}
+manifold = {
+    "dsprites": ["orientation"],
+    "shapes3d": ["floorCol", "wallCol", "objCol"],
+    "mpi3d": [],
+    "mpi3d_real": [],
+    "cars3d": ["azimuth"],
+    "smallnorb": ["rotation"],
+}
+other = {
+    "dsprites": [],
+    "shapes3d": [],
+    "mpi3d": ["objCol", "objSize", "cameraHeight", "backCol"],
+    "mpi3d_real": ["objCol", "objSize", "cameraHeight", "backCol"],
+    "cars3d": [],
+    "smallnorb": ["lighting"],
+}
+
+num_channels = {
+    "dsprites": 1,
+    "shapes3d": 3,
+    "mpi3d": 3,
+    "mpi3d_real": 3,
+    "cars3d": 3,
+    "smallnorb": 1,
+}
+
+
+class DietDataset(torch.utils.data.Dataset):
+    def __init__(self, dataset, transform=None):
+        self.dataset = dataset
+        self.transform = transform
+
+    def __getitem__(self, idx):
+        x, _ = self.dataset[idx]
+        if self.transform is not None:
+            x = self.transform(x)
+        return x, idx
+
+    def __len__(self):
+        return len(self.dataset)
+
+
+class DislibDataset(torch.utils.data.Dataset):
+    def __init__(self, images, labels, transform=None) -> None:
+        super().__init__()
+        self.images = images
+        self.labels = labels
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.images)
+
+    def __getitem__(self, idx):
+        x = torch.tensor(self.images[idx]).float()
+        y = torch.tensor(self.labels[idx])
+
+        if self.transform is not None:
+            x = self.transform(x)
+        return x, y
+
+
 class AddLinfNoise:
     """
     Add uniform L∞-bounded noise to an image tensor (C,H,W) in [0,1].
@@ -36,7 +142,7 @@ class AddLinfNoise:
 
     def __init__(
         self,
-        eps=16 / 255,  # 8 / 255
+        eps=8 / 255,  # 8 / 255
         p=1.0,
         clip=(0.0, 1.0),
         same_for_all_channels=True,  # False
@@ -211,10 +317,7 @@ def get_data(args):
         targets[train_ind],
         transform=train,
     )
-    train_data_diet = DietDataset(
-        train_data,
-        transform=base,
-    )
+    train_data_diet = DietDataset(train_data, transform=train)
     test_data = DislibDataset(
         images[test_ind],
         targets[test_ind],
@@ -240,95 +343,43 @@ def get_data(args):
         out_size = 183
     else:
         out_size = len(np.unique(targets[:, cat_ind]))
-
+    train_len = len(train_data_diet)
     return (
         train_dataloader,
-        # train_diet_dataloader,
+        train_diet_dataloader,
         test_dataloader,
         adv_test_dataloader,
         data,
         out_size,
         nc,
         cat_ind,
+        train_len,
     )
 
 
-# sort latents
-categorical = {
-    "dsprites": ["shape"],
-    "shapes3d": ["objType"],
-    "mpi3d": ["objShape"],
-    "mpi3d_real": ["objShape"],
-    "cars3d": ["object_type"],
-    "smallnorb": ["category", "instance"],
-}
-continuous = {
-    "dsprites": ["scale", "posX", "posY"],
-    "shapes3d": ["objSize", "objAzimuth"],
-    "mpi3d": ["posX", "posY"],
-    "mpi3d_real": ["posX", "posY"],
-    "cars3d": ["elevation"],
-    "smallnorb": ["elevation"],
-}
-manifold = {
-    "dsprites": ["orientation"],
-    "shapes3d": ["floorCol", "wallCol", "objCol"],
-    "mpi3d": [],
-    "mpi3d_real": [],
-    "cars3d": ["azimuth"],
-    "smallnorb": ["rotation"],
-}
-other = {
-    "dsprites": [],
-    "shapes3d": [],
-    "mpi3d": ["objCol", "objSize", "cameraHeight", "backCol"],
-    "mpi3d_real": ["objCol", "objSize", "cameraHeight", "backCol"],
-    "cars3d": [],
-    "smallnorb": ["lighting"],
-}
+def build_optimizer_and_scheduler(model, total_epochs, is_transformer=False):
+    if is_transformer:
+        lr = 2e-4
+        wd = 0.01
+    else:
+        lr = 1e-3
+        wd = 0.05
+    params = [p for m in model for p in m.parameters()]
+    optimizer = AdamW(params, lr=lr, weight_decay=wd)
 
-num_channels = {
-    "dsprites": 1,
-    "shapes3d": 3,
-    "mpi3d": 3,
-    "mpi3d_real": 3,
-    "cars3d": 3,
-    "smallnorb": 1,
-}
+    WARMUP_EPOCHS = 10
 
+    def lr_lambda(epoch):
+        if epoch < WARMUP_EPOCHS:
+            # linear warmup
+            return float(epoch + 1) / WARMUP_EPOCHS
+        else:
+            # cosine
+            progress = (epoch - WARMUP_EPOCHS) / max(1, total_epochs - WARMUP_EPOCHS)
+            return 0.5 * (1 + math.cos(math.pi * progress))
 
-class DietDataset(torch.utils.data.Dataset):
-    def __init__(self, dataset, transform=None):
-        self.dataset = dataset
-        self.transform = transform
-
-    def __getitem__(self, idx):
-        x, _ = self.dataset[idx]
-        if self.transform is not None:
-            x = self.transform(x)
-        return x, idx
-
-    def __len__(self):
-        return len(self.dataset)
-
-
-class DislibDataset(torch.utils.data.Dataset):
-    def __init__(self, images, labels, transform=None) -> None:
-        super().__init__()
-        self.images = images
-        self.labels = labels
-        self.transform = transform
-
-    def __len__(self):
-        return len(self.images)
-
-    def __getitem__(self, idx):
-        x = torch.tensor(self.images[idx]).float()
-        y = torch.tensor(self.labels[idx])
-
-        if self.transform is not None:
-            x = self.transform(x)
-        return x, y
+    scheduler = LambdaLR(optimizer, lr_lambda)
+    return optimizer, scheduler
 
 
 def get_model(model, nc, out_size, seed):
@@ -412,103 +463,28 @@ def log_val(data, net, readout, cat_ind, epoch, run_loss, dataloader, name="val"
     return acc_
 
 
-def train(args, dataset, log_file):
-    with open(log_file, "a") as file:
-        print("\n\nTraining:", file=file)
-    (
-        train_dataloader,
-        test_dataloader,
-        adv_test_dataloader,
-        data,
-        out_size,
-        nc,
-        cat_ind,
-    ) = dataset
-    net = get_model(args.model, nc, out_size, args.seed)
-    readout = nn.Linear(512, out_size).to(device)
-
-    optimizer = torch.optim.Adam(
-        list(net.parameters()) + list(readout.parameters()), lr=args.lr
-    )
-    criterion = nn.CrossEntropyLoss()
-
-    best_val_acc = 0
-    for epoch in range(args.num_epochs):
-        net.train()
-        run_loss = []
-        progress_bar = tqdm(
-            train_dataloader,
-            total=len(train_dataloader),
-            desc=f"Epoch {epoch + 1}/{args.num_epochs}",
-        )
-        for x, y in progress_bar:
-            x = x.to(torch.float32).to(device)
-            y = y.to(torch.long)
-            z = net(x)
-            y_ = readout(z)
-            if args.debug:
-                print("y", y.shape, y.dtype, y.min(), y.max(), y)
-                print("y_", y_.shape, y_.dtype, y_.min(), y_.max(), y_)
-                print("y_cat", y[:, cat_ind])
-            loss = criterion(y_, y[:, cat_ind].to(device))
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            run_loss.append(loss.item())
-            progress_bar.set_postfix(loss=np.mean(run_loss))
-
-        net.eval()
-        val_acc = log_val(
-            data, net, readout, cat_ind, epoch, run_loss, test_dataloader, name="val"
-        )
-        log_val(
-            data,
-            net,
-            readout,
-            cat_ind,
-            epoch,
-            run_loss,
-            adv_test_dataloader,
-            name="adv",
-        )
-
-        net.eval()
-        if val_acc > best_val_acc:
-            best_val_acc = val_acc
-            torch.save(net.state_dict(), os.path.join(args.log_dir, "model.pth"))
-            torch.save(readout.state_dict(), os.path.join(args.log_dir, "readout.pth"))
-        if args.debug:
-            break
-        if best_val_acc > 0.999:
-            with open(log_file, "a") as file:
-                print("early stopping", file=file)
-            break
-        # torch.save(net.state_dict(), os.path.join(args.log_dir, "model.pth"))
-        # torch.save(readout.state_dict(), os.path.join(args.log_dir, "readout.pth"))
-
-
 def evaluate(args, dataset, log_file):
     with open(log_file, "a") as file:
         print("\n\nEvaluating:", file=file)
     (
         train_dataloader,
+        _,
         test_dataloader,
         adv_test_dataloader,
         data,
         out_size,
         nc,
         cat_ind,
+        train_len,
     ) = dataset
     net = get_model(args.model, nc, out_size, args.seed)
-
-    # prepare model
-    if args.model == "image":
-        pass
-    else:
-        net.load_state_dict(torch.load(os.path.join(args.log_dir, "model.pth")))
-        net.eval()
+    net.load_state_dict(torch.load(os.path.join(args.log_dir, "model.pth")))
+    net.eval()
+    for p in net.parameters():
+        p.requires_grad = False
 
     x_train, y_train, x_val, y_val = [], [], [], []
+    x_adv, y_adv = [], []
     with torch.no_grad():
         for i, (x, y) in enumerate(train_dataloader):
             x = x.to(torch.float32).to(device)
@@ -520,45 +496,142 @@ def evaluate(args, dataset, log_file):
             x = x.to(torch.float32).to(device)
             y_val.append(y.to(torch.long).detach().cpu().numpy())
             x_val.append(net(x).detach().cpu().numpy())
+        for i, (x, y) in enumerate(adv_test_dataloader):
+            x = x.to(torch.float32).to(device)
+            y_adv.append(y.to(torch.long).detach().cpu().numpy())
+            x_adv.append(net(x).detach().cpu().numpy())
             if args.debug:
                 break
-    x_train = np.concatenate(x_train)
-    y_train = np.concatenate(y_train)
-    x_val = np.concatenate(x_val)
-    y_val = np.concatenate(y_val)
+    x_train = torch.tensor(np.concatenate(x_train), dtype=torch.float)
+    x_val = torch.tensor(np.concatenate(x_val), dtype=torch.float)
+    x_adv = torch.tensor(np.concatenate(x_adv), dtype=torch.float)
+
+    # del_fn = lambda x: [np.delete(xi, cat_ind) for xi in x]
+
+    y_train = torch.tensor(np.concatenate(y_train), dtype=torch.float32)
+    y_val = torch.tensor(np.concatenate(y_val), dtype=torch.float32)
+    y_adv = torch.tensor(np.concatenate(y_adv), dtype=torch.float32)
+
     if args.debug:
         with open(log_file, "a") as file:
             print(x_train.shape, y_train.shape, x_val.shape, y_val.shape, file=file)
 
-    # decode all coordinates
-    tmp = np.linalg.pinv(x_train.T @ x_train) @ x_train.T
-    for i in range(y_train.shape[1]):
-        y = y_train[:, i].copy() * 1.0
-        y -= np.mean(y)
-        y /= np.std(y)
-        beta = tmp @ y
-        y_train_ = x_train @ beta
-        y_val_ = x_val @ beta
-        with open(log_file, "a") as file:
-            print(
-                "Coordinate",
-                i,
-                data.lat_names[i],
-                "\ntrain",
-                corr(y_train[:, i], y_train_),
-                "\nval",
-                corr(y_val[:, i], y_val_),
-                file=file,
+    _, train1_r2, val_r2 = linear_disentanglement(
+        y_true=torch.nn.functional.normalize(y_train),
+        y_pred=x_train,
+        y_val=torch.nn.functional.normalize(y_val),
+        y_pred_val=x_val,
+    )
+    _, train2_r2, adv_r2 = linear_disentanglement(
+        y_true=torch.nn.functional.normalize(y_train),
+        y_pred=x_train,
+        y_val=torch.nn.functional.normalize(y_adv),
+        y_pred_val=x_adv,
+    )
+    with open(log_file, "a") as file:
+        print(
+            "DisentanglementR2",
+            "\ntrain_1",
+            train1_r2,
+            "\n",
+            "\nval",
+            val_r2,
+            "\ntrain_2",
+            train2_r2,
+            "\n",
+            "\nval",
+            adv_r2,
+        )
+
+
+def train(args, dataset, log_file):
+    with open(log_file, "a") as file:
+        print("\n\nTraining:", file=file)
+    (
+        train_dataloader,
+        _,
+        test_dataloader,
+        adv_test_dataloader,
+        data,
+        out_size,
+        nc,
+        cat_ind,
+        train_len,
+    ) = dataset
+    net = get_model(args.model, nc, out_size, args.seed).to(device)
+    net.load_state_dict(torch.load(os.path.join(args.log_dir, "model.pth")))
+    net.eval()
+    for p in net.parameters():
+        p.requires_grad = False
+    probe = nn.Linear(512, out_size).to(device)
+    optimizer = torch.optim.Adam(
+        list(net.parameters()) + list(probe.parameters()), lr=args.lr
+    )
+    # optimizer, scheduler = build_optimizer_and_scheduler(
+    #     [net, readout], args.num_epochs
+    # )
+    criterion = nn.CrossEntropyLoss()
+
+    for epoch in range(args.num_epochs):
+        probe.train()
+        run_loss = []
+        progress_bar = tqdm(
+            train_dataloader,
+            total=len(train_dataloader),
+            desc=f"Epoch {epoch + 1}/{args.num_epochs}",
+        )
+        for x, y in progress_bar:
+            x = x.to(torch.float32).to(device)
+            y = y.to(torch.long).to(device)
+            z = net(x)
+            y_ = probe(z)
+            if args.debug:
+                print("y", y.shape, y.dtype, y.min(), y.max(), y)
+                print("y_", y_.shape, y_.dtype, y_.min(), y_.max(), y_)
+                print("y_cat", y[:, cat_ind])
+            loss = criterion(y_, y[:, cat_ind].to(device))
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            run_loss.append(loss.item())
+            progress_bar.set_postfix(loss=np.mean(run_loss))
+        if epoch % 10 == 0:
+            probe.eval()
+            val_acc = log_val(
+                data, net, probe, cat_ind, epoch, run_loss, test_dataloader, name="val"
             )
+            log_val(
+                data,
+                net,
+                probe,
+                cat_ind,
+                epoch,
+                run_loss,
+                adv_test_dataloader,
+                name="adv",
+            )
+            probe.train()
+
+    probe.eval()
+    val_acc = log_val(data, net, probe, cat_ind, 100, 0, test_dataloader, name="val")
+    log_val(
+        data,
+        net,
+        probe,
+        cat_ind,
+        100,
+        0,
+        adv_test_dataloader,
+        name="adv",
+    )
+    torch.save(probe.state_dict(), os.path.join(args.log_dir, "probe.pth"))
 
 
 def setup_logging(args):
     # Ensure the log directory exists and is empty
-    if os.path.exists(args.log_dir):
-        shutil.rmtree(args.log_dir)  # Remove the directory and all its contents
-    os.makedirs(args.log_dir)  # Recreate the directory
-    log_file = os.path.join(args.log_dir, "log.txt")
-    with open(log_file, "a") as file:
+    os.makedirs(args.log_dir, exist_ok=True)  # Recreate the directory
+    log_file = os.path.join(args.log_dir, "log_id.txt")
+    with open(log_file, "w") as file:
         print(args, file=file)
     return log_file
 
@@ -612,7 +685,6 @@ if __name__ == "__main__":
 
     args.num_epochs = 100
     log_file = setup_logging(args)
+    args.aug = "none"
     dataset = get_data(args)
-    if model != "image":
-        train(args, dataset, log_file)
     evaluate(args, dataset, log_file)
