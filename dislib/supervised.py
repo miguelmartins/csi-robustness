@@ -39,7 +39,7 @@ class AddLinfNoise:
         eps=16 / 255,  # 8 / 255
         p=1.0,
         clip=(0.0, 1.0),
-        same_for_all_channels=True,  # False
+        same_for_all_channels=False,  # False
         generator=None,
     ):
         """

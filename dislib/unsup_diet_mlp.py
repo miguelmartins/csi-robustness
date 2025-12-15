@@ -705,7 +705,7 @@ if __name__ == "__main__":
     settings = []
     for dataset in DATASETS[:]:
         for rep in range(10):
-            for model in ["cnn"]:
+            for model in ["mlp"]:
                 settings.append([rep, dataset, model])
     assert setting >= 0 and setting < len(settings)
     rep, dataset, model = settings[setting]
