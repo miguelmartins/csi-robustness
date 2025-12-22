@@ -126,14 +126,57 @@ def get_data(args, dataset_class, aug):
     )
 
     train_dataloader = torch.utils.data.DataLoader(
-        train_data, batch_size=args.batch_size, shuffle=True
+        train_data,
+        batch_size=args.batch_size,
+        shuffle=True,
+        multiprocessing_context="fork",
+        prefetch_factor=4,
+        persistent_workers=True,
+        num_workers=8,
+        drop_last=True,
     )
+
+    # train_diet_dataloader = DataLoader(
+    #     train_data_diet,
+    #     batch_size=args.batch_size,
+    #     shuffle=True,
+    #     multiprocessing_context="fork",
+    #     prefetch_factor=4,
+    #     persistent_workers=True,
+    #     num_workers=8,
+    #     drop_last=True,
+    # )
+
     val_dataloader = torch.utils.data.DataLoader(
-        val_data, batch_size=args.batch_size, shuffle=False
+        val_data,
+        batch_size=args.batch_size,
+        shuffle=True,
+        multiprocessing_context="fork",
+        prefetch_factor=4,
+        persistent_workers=True,
+        num_workers=8,
+        drop_last=True,
     )
     test_dataloader = torch.utils.data.DataLoader(
-        test_data, batch_size=args.batch_size, shuffle=False
+        test_data,
+        batch_size=args.batch_size,
+        shuffle=False,
+        multiprocessing_context="fork",
+        prefetch_factor=4,
+        persistent_workers=True,
+        num_workers=8,
+        drop_last=False,
     )
+    # adv_test_dataloader = DataLoader(
+    #     adv_test_data,
+    #     batch_size=args.batch_size,
+    #     shuffle=False,
+    #     multiprocessing_context="fork",
+    #     prefetch_factor=4,
+    #     persistent_workers=True,
+    #     num_workers=8,
+    #     drop_last=False,
+    # )
 
     if args.dataset == "cars3d":
         # missing classes in cars3d
