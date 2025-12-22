@@ -50,7 +50,7 @@ DATA_DIR = "./data2"
 SAVE_PATH = "./logs"
 DATASETS = ["dsprites", "shapes3d", "mpi3d", "mpi3d_real", "cars3d", "smallnorb"]
 
-sys.path.append("/Users/miguelmartins/Projects/disentangling-correlated-factors")
+sys.path.append("/home/miguelmartins/Projects/disentangling-correlated-factors")
 from datasets.utils import get_dataset
 
 
@@ -155,7 +155,7 @@ def get_data(args, dataset_class, aug):
         prefetch_factor=4,
         persistent_workers=True,
         num_workers=8,
-        drop_last=True,
+        drop_last=False,
     )
     test_dataloader = torch.utils.data.DataLoader(
         test_data,

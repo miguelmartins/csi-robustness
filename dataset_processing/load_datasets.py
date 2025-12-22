@@ -17,7 +17,7 @@ class DietDataset(torch.utils.data.Dataset):
         self.augmentations = augmentations
         if augmentations is None:
             self.transform = v2.Compose(
-                [v2.ToImage(), v2.ToDtype(torch.float32, scale=False), augmentations]
+                [v2.ToImage(), v2.ToDtype(torch.float32, scale=False)]
             )
         else:
             self.transform = v2.Compose(
@@ -46,7 +46,7 @@ class DislibDataset(torch.utils.data.Dataset):
         self.augmentations = augmentations
         if augmentations is None:
             self.transform = v2.Compose(
-                [v2.ToImage(), v2.ToDtype(torch.float32, scale=False), augmentations]
+                [v2.ToImage(), v2.ToDtype(torch.float32, scale=False)]
             )
         else:
             self.transform = v2.Compose(

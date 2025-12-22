@@ -228,20 +228,17 @@ def evaluate(args, dataset, device, log_file):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Training script LinRep")
     parser.add_argument("--rep", type=int, default=0, help="repetetion")
-    rep = parser.parse_args().rep
-
     parser.add_argument(
         "--backbone", type=str, default="cnn", help="mlp or cnn (resnet18)"
     )
-
-    backbone = parser.parse_args().backbone
-
     parser.add_argument(
         "--aug", type=str, default="none", help="Augmentations in train"
     )
-    aug = parser.parse_args().aug
-
     parser.add_argument("--dataset", type=str, default="dsprites", help="Dataset")
+
+    rep = parser.parse_args().rep
+    backbone = parser.parse_args().backbone
+    aug = parser.parse_args().aug
     dataset = parser.parse_args().dataset
 
     settings = []
@@ -252,11 +249,10 @@ if __name__ == "__main__":
     args.dataset = dataset
     args.model = backbone
     args.log_dir = os.path.join(
-        defaults.SAVE_PATH, "%s_model_%s_rep_%s" % (dataset, backbone, rep)
+        defaults.SAVE_PATH, "%s_model_%s_%s_rep_%s" % (dataset, backbone, aug, rep)
     )
 
     log_file = setup_logging(args)
-    dataset = defaults.get_data(args, DislibDataset, aug=aug)
     if torch.cuda.is_available():
         device = torch.device("cuda")
         num_gpus = torch.cuda.device_count()
@@ -269,6 +265,12 @@ if __name__ == "__main__":
         device = torch.device("cpu")
         num_gpus = 0
         print("Using CPU")
+
+    if aug != "none":
+        aug, _ = dsprites_augmentations(aug, 64)
+    else:
+        aug = None
+    dataset = defaults.get_data(args, DislibDataset, aug=aug)
     if backbone != "image":
         train(args, dataset, device, log_file)
     evaluate(args, dataset, device, log_file)
