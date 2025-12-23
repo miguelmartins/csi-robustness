@@ -54,7 +54,7 @@ sys.path.append("/home/miguelmartins/Projects/disentangling-correlated-factors")
 from datasets.utils import get_dataset
 
 
-def get_data(args, dataset_class, aug):
+def get_data(args, dataset_class, aug, aug_adv):
     print("Loading:", args.dataset)
     if args.dataset == "dsprites":
         data = get_dataset(args.dataset)(
@@ -124,6 +124,9 @@ def get_data(args, dataset_class, aug):
         images[test_ind],
         torch.tensor(targets[test_ind]),
     )
+    adv_test_data = dataset_class(
+        images[train_ind], torch.tensor(targets[train_ind]), augmentations=aug_adv
+    )
 
     train_dataloader = torch.utils.data.DataLoader(
         train_data,
@@ -167,6 +170,16 @@ def get_data(args, dataset_class, aug):
         num_workers=8,
         drop_last=False,
     )
+    adv_test_dataloader = torch.utils.data.DataLoader(
+        adv_test_data,
+        batch_size=args.batch_size,
+        shuffle=False,
+        multiprocessing_context="fork",
+        prefetch_factor=4,
+        persistent_workers=True,
+        num_workers=8,
+        drop_last=False,
+    )
     # adv_test_dataloader = DataLoader(
     #     adv_test_data,
     #     batch_size=args.batch_size,
@@ -188,6 +201,7 @@ def get_data(args, dataset_class, aug):
         train_dataloader,
         val_dataloader,
         test_dataloader,
+        adv_test_dataloader,
         data,
         out_size,
         nc,

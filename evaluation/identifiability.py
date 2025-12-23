@@ -29,17 +29,18 @@ def inference_pass(dataloader, probe, net, device):
     return y_true, y_pred, zs
 
 
-def log_validation(*, val_dataloader, net, readout, data, cat_ind, log_file, device):
-    y_true, y_pred, zs = inference_pass(val_dataloader, readout, net, device)
+def log_validation(*, dataloader, net, readout, data, cat_ind, log_file, device):
+    y_true, y_pred, zs = inference_pass(dataloader, readout, net, device)
     y_latent = LinReg(zs, y_true)  # TODO: maybe normalize y_true?
     # we need the cast to float since torch does not like to do broadcastable operations on bool
     val_acc = torch.mean((y_true[:, cat_ind] == y_pred).float()).cpu().numpy()
-    print("val_acc", val_acc)
+    print("acc:", val_acc)
     zs = zs.detach().cpu()
     y_true = y_true.cpu().numpy()
     y_pred = y_pred.cpu().numpy()
     y_latent = y_latent.cpu().numpy()
     with open(log_file, "a") as file:
+        print("acc", val_acc, file=file)
         for i in range(y_true.shape[1]):
             print(
                 "Coordinate",
@@ -56,9 +57,16 @@ def log_validation(*, val_dataloader, net, readout, data, cat_ind, log_file, dev
 def log_test_evaluation(args, dataset, device, log_file):
     with open(log_file, "a") as file:
         print("\n\nEvaluating:", file=file)
-    (train_dataloader, val_dataloader, test_dataloader, data, out_size, nc, cat_ind) = (
-        dataset
-    )
+    (
+        train_dataloader,
+        val_dataloader,
+        test_dataloader,
+        adv_test_dataloader,
+        data,
+        out_size,
+        nc,
+        cat_ind,
+    ) = dataset
     net = get_model(args.model, nc, out_size, device, args.seed)
 
     # prepare model
@@ -72,6 +80,9 @@ def log_test_evaluation(args, dataset, device, log_file):
     y_true_test, _, zs_test = inference_pass(
         test_dataloader, torch.nn.Identity(), net, device
     )
+    y_true_adv_test, _, zs_adv_test = inference_pass(
+        adv_test_dataloader, torch.nn.Identity(), net, device
+    )
 
     # decode all coordinates
     for i in range(y_true.shape[1]):
@@ -82,6 +93,7 @@ def log_test_evaluation(args, dataset, device, log_file):
         beta = torch.linalg.lstsq(zs, y_true[:, i]).solution
         y_train_ = (zs @ beta).cpu().numpy()
         y_test_ = (zs_test @ beta).cpu().numpy()
+        y_adv_ = (zs_adv_test @ beta).cpu().numpy()
         with open(log_file, "a") as file:
             print(
                 "Coordinate",
@@ -91,5 +103,7 @@ def log_test_evaluation(args, dataset, device, log_file):
                 corr(y_true[:, i].cpu().numpy(), y_train_),
                 "\nval",
                 corr(y_true_test[:, i].cpu().numpy(), y_test_),
+                "\nadv",
+                corr(y_true_adv_test[:, i].cpu().numpy(), y_adv_),
                 file=file,
             )

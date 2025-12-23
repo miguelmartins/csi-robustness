@@ -18,14 +18,22 @@ from tqdm.auto import tqdm
 from evaluation.identifiability import log_test_evaluation, log_validation
 from evaluation.logging import Args, setup_logging
 from models.baselines import get_model
+from torchvision.transforms import v2
 
 
 def train(args, dataset, device, log_file):
     with open(log_file, "a") as file:
         print("\n\nTraining:", file=file)
-    (train_dataloader, val_dataloader, test_dataloader, data, out_size, nc, cat_ind) = (
-        dataset
-    )
+    (
+        train_dataloader,
+        val_dataloader,
+        test_dataloader,
+        _,
+        data,
+        out_size,
+        nc,
+        cat_ind,
+    ) = dataset
 
     net = get_model(args.model, nc, out_size, device, args.seed)
     readout = nn.Linear(512, out_size).to(device)
@@ -63,7 +71,7 @@ def train(args, dataset, device, log_file):
 
         net.eval()
         val_acc = log_validation(
-            val_dataloader=val_dataloader,
+            dataloader=val_dataloader,
             net=net,
             readout=readout,
             data=data,
@@ -128,11 +136,8 @@ if __name__ == "__main__":
         num_gpus = 0
         print("Using CPU")
 
-    if aug != "none":
-        aug, _ = dsprites_augmentations(aug, 64)
-    else:
-        aug = None
-    dataset = defaults.get_data(args, DislibDataset, aug=aug)
+    aug, aug_adv = dsprites_augmentations(aug, 64, adv=8 / 255)
+    dataset = defaults.get_data(args, DislibDataset, aug=aug, aug_adv=v2.Identity())
     if backbone != "image":
         train(args, dataset, device, log_file)
     log_test_evaluation(args, dataset, device, log_file)

@@ -1,5 +1,8 @@
 from torchvision.transforms import v2
 
+from dataset_processing.attacks import UniformLinfAttackNoClamp
+import torch
+
 
 def dsprites_symmetries(
     out_size: int = 64,
@@ -33,7 +36,7 @@ def dsprites_symmetries(
     return v2.Compose(tfms)
 
 
-def dsprites_augmentations(aug, img_size):
+def dsprites_augmentations(aug, img_size, adv=8 / 255):
     def get_color_distortion(s=0.5):  # 0.5 for CIFAR10 by default
         # s is the strength of color distortion
         return v2.RandomApply(
@@ -46,7 +49,7 @@ def dsprites_augmentations(aug, img_size):
         return v2.RandomApply([color_jitter], p=0.8)
 
     if aug == "none":
-        augmentations = []
+        augmentations = [v2.Identity()]
     elif aug == "crop":
         augmentations = [
             v2.RandomResizedCrop(
@@ -113,6 +116,10 @@ def dsprites_augmentations(aug, img_size):
                 use_reflection=True,  # set True if you want reflection invariance
             ),
         ]
+    adv_augmentations = augmentations.copy()
+    adv_augmentations.insert(
+        0, v2.Lambda(lambda x: x + torch.empty_like(x).uniform_(-adv, adv))
+    )
     train_augmentations = v2.Compose(augmentations)
-    adv_augmentations = augmentations.copy().insert(0, v2.Identity())
+    adv_augmentations = v2.Compose(adv_augmentations)
     return train_augmentations, adv_augmentations

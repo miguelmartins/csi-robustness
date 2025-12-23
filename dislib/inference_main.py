@@ -22,11 +22,18 @@ from models.baselines import get_model
 
 
 def inference(args, dataset, device, log_file):
-    with open(log_file, "a") as file:
+    with open(log_file, "w") as file:
         print("\n\nTraining:", file=file)
-    (train_dataloader, val_dataloader, test_dataloader, data, out_size, nc, cat_ind) = (
-        dataset
-    )
+    (
+        train_dataloader,
+        val_dataloader,
+        test_dataloader,
+        adv_test_dataloader,
+        data,
+        out_size,
+        nc,
+        cat_ind,
+    ) = dataset
 
     net = get_model(args.model, nc, out_size, device, args.seed)
     net.load_state_dict(torch.load(os.path.join(args.log_dir, "model.pth")))
@@ -63,7 +70,7 @@ def inference(args, dataset, device, log_file):
 
         probe.eval()
         val_acc = log_validation(
-            val_dataloader=val_dataloader,
+            dataloader=val_dataloader,
             net=net,
             readout=probe,
             data=data,
@@ -79,11 +86,11 @@ def inference(args, dataset, device, log_file):
             best_val_acc = val_acc
             torch.save(probe.state_dict(), os.path.join(args.log_dir, "probe.pth"))
 
-        if best_val_acc > 0.999:
+        def final_logs():
             with open(log_file, "a") as file:
-                print("early stopping", file=file)
+                print("early stopping\n", file=file)
                 test_acc = log_validation(
-                    val_dataloader=test_dataloader,
+                    dataloader=test_dataloader,
                     net=net,
                     readout=probe,
                     data=data,
@@ -92,7 +99,7 @@ def inference(args, dataset, device, log_file):
                     device=device,
                 )
                 print(
-                    "Probing",
+                    "Probe",
                     epoch,
                     "Loss",
                     np.mean(run_loss),
@@ -100,7 +107,30 @@ def inference(args, dataset, device, log_file):
                     test_acc,
                     file=file,
                 )
-            break
+                adv_test_acc = log_validation(
+                    dataloader=adv_test_dataloader,
+                    net=net,
+                    readout=probe,
+                    data=data,
+                    cat_ind=cat_ind,
+                    log_file=log_file,
+                    device=device,
+                )
+                print(
+                    "Probe",
+                    epoch,
+                    "Loss",
+                    np.mean(run_loss),
+                    "adv_test_acc",
+                    adv_test_acc,
+                    file=file,
+                )
+
+        if best_val_acc > 0.999:
+            # change get_data instead of this
+            final_logs()
+            return
+        final_logs()
 
 
 if __name__ == "__main__":
@@ -144,11 +174,8 @@ if __name__ == "__main__":
         num_gpus = 0
         print("Using CPU")
 
-    if aug != "none":
-        aug, _ = dsprites_augmentations(aug, 64)
-    else:
-        aug = None
-    dataset = defaults.get_data(args, DislibDataset, aug=aug)
+    aug, aug_adv = dsprites_augmentations(aug, 64, adv=8 / 255)
+    dataset = defaults.get_data(args, DislibDataset, aug=aug, aug_adv=aug_adv)
     log_file = os.path.join(args.log_dir, "probe.txt")
     if backbone != "image":
         inference(args, dataset, device, log_file)
