@@ -4,6 +4,7 @@
 # 3: adapt to DIET
 # 4: run all combinations
 # 5: start working on next dataset
+# 6: mention LeJEPA as a proof that the best downstream risk has to be isotropic Gaussian and that poses id. issues
 import argparse
 import dislib.defaults as defaults
 import numpy as np
@@ -21,7 +22,6 @@ from models.baselines import get_model
 
 
 def inference(args, dataset, device, log_file):
-    log_file = os.path.join(args.log_dir, "probe.txt")
     with open(log_file, "a") as file:
         print("\n\nTraining:", file=file)
     (train_dataloader, val_dataloader, test_dataloader, data, out_size, nc, cat_ind) = (
@@ -32,14 +32,12 @@ def inference(args, dataset, device, log_file):
     net.load_state_dict(torch.load(os.path.join(args.log_dir, "model.pth")))
     net.eval()
     probe = nn.Linear(512, out_size).to(device)
-
-    optimizer = torch.optim.Adam(
-        list(net.parameters()) + list(probe.parameters()), lr=args.lr
-    )
+    optimizer = torch.optim.Adam(list(probe.parameters()), lr=args.lr)
     criterion = nn.CrossEntropyLoss()
 
     best_val_acc = 0
     for epoch in range(args.num_epochs):
+        probe.train()
         run_loss = []
         progress_bar = tqdm(
             train_dataloader,
@@ -80,11 +78,28 @@ def inference(args, dataset, device, log_file):
         if val_acc > best_val_acc:
             best_val_acc = val_acc
             torch.save(probe.state_dict(), os.path.join(args.log_dir, "probe.pth"))
-        if args.debug:
-            break
+
         if best_val_acc > 0.999:
             with open(log_file, "a") as file:
                 print("early stopping", file=file)
+                test_acc = log_validation(
+                    val_dataloader=test_dataloader,
+                    net=net,
+                    readout=probe,
+                    data=data,
+                    cat_ind=cat_ind,
+                    log_file=log_file,
+                    device=device,
+                )
+                print(
+                    "Probing",
+                    epoch,
+                    "Loss",
+                    np.mean(run_loss),
+                    "test_acc",
+                    test_acc,
+                    file=file,
+                )
             break
 
 
@@ -111,6 +126,7 @@ if __name__ == "__main__":
     args.seed = defaults.SEED + rep
     args.dataset = dataset
     args.model = backbone
+    args.probe = True  # REQUIRED TO LOG PROBE
     args.log_dir = os.path.join(
         defaults.SAVE_PATH, "%s_model_%s_%s_rep_%s" % (dataset, backbone, aug, rep)
     )
@@ -133,6 +149,7 @@ if __name__ == "__main__":
     else:
         aug = None
     dataset = defaults.get_data(args, DislibDataset, aug=aug)
+    log_file = os.path.join(args.log_dir, "probe.txt")
     if backbone != "image":
-        inference(args, dataset, device)
+        inference(args, dataset, device, log_file)
     log_test_evaluation(args, dataset, device, log_file)
