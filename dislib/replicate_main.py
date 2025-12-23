@@ -1,3 +1,9 @@
+# 0: make it so it does not delete the directory
+# 1: modify train and evaluate
+# 2: modify np.linalg.pinv to torch
+# 3: adapt to DIET
+# 4: run all combinations
+# 5: start working on next dataset
 import argparse
 import dislib.defaults as defaults
 import numpy as np
@@ -11,6 +17,9 @@ from dataset_processing.load_datasets import DislibDataset
 from torchvision.models import resnet18
 from tqdm.auto import tqdm
 from scipy.stats import pearsonr as corr
+
+from evaluation.identifiability import log_validation
+from models.baselines import get_model
 
 
 class Args:
@@ -43,45 +52,6 @@ def setup_logging(args):
     return log_file
 
 
-def get_model(model, nc, out_size, device, seed):
-    torch.manual_seed(seed)
-    if model == "image":
-        net = nn.Sequential(
-            nn.Flatten(1),
-        ).to(device)
-    elif model == "linear":
-        net = nn.Sequential(
-            nn.Flatten(1),
-            nn.Linear(nc * 64 * 64, 512),
-        ).to(device)
-    elif model == "mlp":
-        net = nn.Sequential(
-            nn.Flatten(1),
-            nn.Linear(nc * 64 * 64, 512),
-            nn.BatchNorm1d(512),
-            nn.ReLU(),
-            nn.Linear(512, 512),
-            nn.BatchNorm1d(512),
-            nn.ReLU(),
-            nn.Linear(512, 512),
-            nn.BatchNorm1d(512),
-            nn.ReLU(),
-        ).to(device)
-    elif model == "cnn":
-        net = resnet18()
-        net.conv1 = nn.Conv2d(nc, 64, 7, 2, 3, bias=False)
-        net.fc = nn.Identity()
-        net = net.to(device)
-    else:
-        raise ValueError("Model %s undefined." % model)
-    return net
-
-
-def LinReg(X, Y):
-    beta = np.linalg.pinv(X.T @ X) @ X.T @ Y
-    return X @ beta
-
-
 def train(args, dataset, device, log_file):
     with open(log_file, "a") as file:
         print("\n\nTraining:", file=file)
@@ -107,8 +77,8 @@ def train(args, dataset, device, log_file):
             desc=f"Epoch {epoch + 1}/{args.num_epochs}",
         )
         for x, y in progress_bar:
-            x = x.to(torch.float32).to(device)
-            y = y.to(torch.long)
+            x = x.to(device)  # .to(torch.float32).to(device)
+            y = y.to(device)  # .to(torch.long)
             z = net(x)
             y_ = readout(z)
             if args.debug:
@@ -124,32 +94,15 @@ def train(args, dataset, device, log_file):
                 break
 
         net.eval()
-        Y, Z, Y_ = [], [], []
-        with torch.no_grad():
-            for i, (x, y) in enumerate(val_dataloader):
-                x = x.to(torch.float32).to(device)
-                z = net(x)
-                y_ = readout(z)
-                Y.append(y.to(torch.long).detach().cpu().numpy())
-                Y_.append(y_.argmax(1).detach().cpu().numpy())
-                Z.append(z.detach().cpu().numpy())
-                if args.debug:
-                    break
-        Y = np.concatenate(Y)
-        Y_ = np.concatenate(Y_)
-        Z = np.concatenate(Z)
-        val_acc = np.mean(Y[:, cat_ind] == Y_)
-        print("val_acc", val_acc)
-        Y_ = LinReg(Z, Y)
-        with open(log_file, "a") as file:
-            for i in range(Y.shape[1]):
-                print(
-                    "Coordinate",
-                    i,
-                    data.lat_names[i],
-                    corr(Y[:, i], Y_[:, i])[0],
-                    file=file,
-                )
+        val_acc = log_validation(
+            val_dataloader=val_dataloader,
+            net=net,
+            readout=readout,
+            data=data,
+            cat_ind=cat_ind,
+            log_file=log_file,
+            device=device,
+        )
         with open(log_file, "a") as file:
             print(
                 "Epoch", epoch, "Loss", np.mean(run_loss), "val_acc", val_acc, file=file
