@@ -1,6 +1,8 @@
 .DS_STORE
 *.txt
+*.npy
 *.npz
+*.h5
 
 .ipynb_checkpoints/*
 */__pycache__/*
