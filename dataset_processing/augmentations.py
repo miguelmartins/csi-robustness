@@ -93,7 +93,7 @@ def dsprites_augmentations(aug, img_size, adv=8 / 255):
             v2.RandomHorizontalFlip(),
             stronger_distortion(),
         ]
-    elif aug == "geom_ds":
+    elif aug == "geom":
         # Example usage:
         augmentations = [
             dsprites_symmetries(
@@ -103,7 +103,7 @@ def dsprites_augmentations(aug, img_size, adv=8 / 255):
                 use_reflection=True,  # set True if you want reflection invariance
             )
         ]
-    elif aug == "geom_ds_crop":
+    elif aug == "geom_crop":
         # Example usage:
         augmentations = [
             v2.RandomResizedCrop(

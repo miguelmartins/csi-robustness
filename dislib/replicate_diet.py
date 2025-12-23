@@ -20,6 +20,9 @@ from evaluation.logging import Args, setup_logging
 from models.baselines import get_model
 from torchvision.transforms import v2
 
+from optimization.scheduler import build_optimizer_and_scheduler
+from dataset_processing.load_datasets import DietDataset
+
 
 def train(args, dataset, device, log_file):
     with open(log_file, "a") as file:
@@ -36,10 +39,19 @@ def train(args, dataset, device, log_file):
     ) = dataset
 
     net = get_model(args.model, nc, out_size, device, args.seed)
-    readout = nn.Linear(512, out_size).to(device)
-
-    optimizer = torch.optim.Adam(
-        list(net.parameters()) + list(readout.parameters()), lr=args.lr
+    readout = nn.Linear(512, len(train_dataloader.dataset)).to(device)
+    # if torch.cuda.is_available():
+    #     device = torch.device("cuda")
+    #     num_gpus = torch.cuda.device_count()
+    # else:
+    #     num_gpus = 0
+    #
+    # # after creating net/readout:
+    # if num_gpus > 1:
+    #     net = nn.DataParallel(net)
+    #     readout = nn.DataParallel(readout)
+    optimizer, scheduler = build_optimizer_and_scheduler(
+        [net, readout], args.num_epochs
     )
     criterion = nn.CrossEntropyLoss()
 
@@ -57,10 +69,7 @@ def train(args, dataset, device, log_file):
             y = y.to(device)  # .to(torch.long)
             z = net(x)
             y_ = readout(z)
-            if args.debug:
-                print("y", y.shape, y.dtype, y.min(), y.max(), y)
-                print("y_", y_.shape, y_.dtype, y_.min(), y_.max(), y_)
-            loss = criterion(y_, y[:, cat_ind].to(device))
+            loss = criterion(y_, y)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -69,30 +78,9 @@ def train(args, dataset, device, log_file):
             if args.debug:
                 break
 
-        net.eval()
-        val_acc = log_validation(
-            dataloader=val_dataloader,
-            net=net,
-            readout=readout,
-            data=data,
-            cat_ind=cat_ind,
-            log_file=log_file,
-            device=device,
-        )
-        with open(log_file, "a") as file:
-            print(
-                "Epoch", epoch, "Loss", np.mean(run_loss), "val_acc", val_acc, file=file
-            )
-        if val_acc > best_val_acc:
-            best_val_acc = val_acc
-            torch.save(net.state_dict(), os.path.join(args.log_dir, "model.pth"))
-            torch.save(readout.state_dict(), os.path.join(args.log_dir, "readout.pth"))
-        if args.debug:
-            break
-        if best_val_acc > 0.999:
-            with open(log_file, "a") as file:
-                print("early stopping", file=file)
-            break
+        scheduler.step()
+    torch.save(net.state_dict(), os.path.join(args.log_dir, "model.pth"))
+    torch.save(readout.state_dict(), os.path.join(args.log_dir, "readout.pth"))
 
 
 if __name__ == "__main__":
@@ -118,8 +106,9 @@ if __name__ == "__main__":
     args.seed = defaults.SEED + rep
     args.dataset = dataset
     args.model = backbone
+    args.batch_size = 512
     args.log_dir = os.path.join(
-        defaults.SAVE_PATH, "%s_model_%s_%s_rep_%s" % (dataset, backbone, aug, rep)
+        defaults.SAVE_PATH, "diet_%s_model_%s_%s_rep_%s" % (dataset, backbone, aug, rep)
     )
 
     log_file = setup_logging(args)
@@ -137,7 +126,13 @@ if __name__ == "__main__":
         print("Using CPU")
 
     aug, aug_adv = dsprites_augmentations(aug, 64, adv=8 / 255)
-    dataset = defaults.get_data(args, DislibDataset, aug=aug, aug_adv=aug_adv)
+    dataset = defaults.get_data(
+        args, DislibDataset, aug=aug, aug_adv=aug_adv, diet_class=DietDataset
+    )
     if backbone != "image":
         train(args, dataset, device, log_file)
+    del dataset
+    dataset = defaults.get_data(
+        args, DislibDataset, aug=aug, aug_adv=aug_adv, diet_class=None
+    )
     log_test_evaluation(args, dataset, device, log_file)
