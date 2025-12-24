@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 import os
 from scipy.stats import pearsonr as corr
@@ -31,10 +32,11 @@ def inference_pass(dataloader, probe, net, device):
 
 def log_validation(*, dataloader, net, readout, data, cat_ind, log_file, device):
     y_true, y_pred, zs = inference_pass(dataloader, readout, net, device)
-    y_latent = LinReg(zs, y_true)  # TODO: maybe normalize y_true?
-    # we need the cast to float since torch does not like to do broadcastable operations on bool
     val_acc = torch.mean((y_true[:, cat_ind] == y_pred).float()).cpu().numpy()
     print("acc:", val_acc)
+    y_latent = LinReg(zs, y_true.float())
+    # y_latent = LinReg(zs, y_true)  # TODO: maybe normalize y_true?
+    # we need the cast to float since torch does not like to do broadcastable operations on bool
     zs = zs.detach().cpu()
     y_true = y_true.cpu().numpy()
     y_pred = y_pred.cpu().numpy()
@@ -90,10 +92,14 @@ def log_test_evaluation(args, dataset, device, log_file):
         # y -= np.mean(y)
         # y /= np.std(y)
         # beta = tmp @ y
-        beta = torch.linalg.lstsq(zs, y_true[:, i]).solution
+        y = y_true[:, i] * 1.0
+        y -= torch.mean(y)
+        y /= torch.std(y)
+        beta = torch.linalg.lstsq(zs, y).solution
         y_train_ = (zs @ beta).cpu().numpy()
         y_test_ = (zs_test @ beta).cpu().numpy()
         y_adv_ = (zs_adv_test @ beta).cpu().numpy()
+
         with open(log_file, "a") as file:
             print(
                 "Coordinate",
@@ -105,5 +111,75 @@ def log_test_evaluation(args, dataset, device, log_file):
                 corr(y_true_test[:, i].cpu().numpy(), y_test_),
                 "\nadv",
                 corr(y_true_adv_test[:, i].cpu().numpy(), y_adv_),
+                file=file,
+            )
+
+
+def evaluate(args, dataset, device, log_file):
+    with open(log_file, "a") as file:
+        print("\n\nEvaluating:", file=file)
+    (
+        train_dataloader,
+        val_dataloader,
+        test_dataloader,
+        adv_test_dataloader,
+        data,
+        out_size,
+        nc,
+        cat_ind,
+    ) = dataset
+    net = get_model(args.model, nc, out_size, device, args.seed)
+    net.load_state_dict(torch.load(os.path.join(args.log_dir, "model.pth")))
+    net.eval()
+    x_train, y_train, x_val, y_val = [], [], [], []
+    x_adv, y_adv = [], []
+    with torch.no_grad():
+        for i, (x, y) in enumerate(train_dataloader):
+            x = x.to(torch.float32).to(device)
+            y_train.append(y.to(torch.long).detach().cpu().numpy())
+            x_train.append(net(x).detach().cpu().numpy())
+            if args.debug:
+                break
+        for i, (x, y) in enumerate(test_dataloader):
+            x = x.to(torch.float32).to(device)
+            y_val.append(y.to(torch.long).detach().cpu().numpy())
+            x_val.append(net(x).detach().cpu().numpy())
+        for i, (x, y) in enumerate(adv_test_dataloader):
+            x = x.to(torch.float32).to(device)
+            y_adv.append(y.to(torch.long).detach().cpu().numpy())
+            x_adv.append(net(x).detach().cpu().numpy())
+            if args.debug:
+                break
+    x_train = np.concatenate(x_train)
+    y_train = np.concatenate(y_train)
+    x_val = np.concatenate(x_val)
+    y_val = np.concatenate(y_val)
+    x_adv = np.concatenate(x_adv)
+    y_adv = np.concatenate(y_adv)
+    if args.debug:
+        with open(log_file, "a") as file:
+            print(x_train.shape, y_train.shape, x_val.shape, y_val.shape, file=file)
+
+    # decode all coordinates
+    tmp = np.linalg.pinv(x_train.T @ x_train) @ x_train.T
+    for i in range(y_train.shape[1]):
+        y = y_train[:, i].copy() * 1.0
+        y -= np.mean(y)
+        y /= np.std(y)
+        beta = tmp @ y
+        y_train_ = x_train @ beta
+        y_val_ = x_val @ beta
+        y_adv_ = x_adv @ beta
+        with open(log_file, "a") as file:
+            print(
+                "Coordinate",
+                i,
+                data.lat_names[i],
+                "\ntrain",
+                corr(y_train[:, i], y_train_),
+                "\nval",
+                corr(y_val[:, i], y_val_),
+                "\nadv",
+                corr(y_adv[:, i], y_adv_),
                 file=file,
             )

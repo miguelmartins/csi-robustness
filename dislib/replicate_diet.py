@@ -1,9 +1,8 @@
-# 0: make it so it does not delete the directory
-# 1: modify train and evaluate
-# 2: modify np.linalg.pinv to torch
-# 3: adapt to DIET
-# 4: run all combinations
-# 5: start working on next dataset
+# 1: Implement color augs with gaussian blur
+# 2: Implement Diet strength augs
+# 3. See how they interact with random noise attack
+# 4. See if we can have bigger batch size for diet
+# 5: run all combinations
 import argparse
 import dislib.defaults as defaults
 import numpy as np
@@ -22,6 +21,7 @@ from torchvision.transforms import v2
 
 from optimization.scheduler import build_optimizer_and_scheduler
 from dataset_processing.load_datasets import DietDataset
+from evaluation.identifiability import evaluate
 
 
 def train(args, dataset, device, log_file):
@@ -125,7 +125,7 @@ if __name__ == "__main__":
         num_gpus = 0
         print("Using CPU")
 
-    aug, aug_adv = dsprites_augmentations(aug, 64, adv=8 / 255)
+    aug, aug_adv = dsprites_augmentations(aug, 64, adv=4 / 255)
     dataset = defaults.get_data(
         args, DislibDataset, aug=aug, aug_adv=aug_adv, diet_class=DietDataset
     )
@@ -135,4 +135,4 @@ if __name__ == "__main__":
     dataset = defaults.get_data(
         args, DislibDataset, aug=aug, aug_adv=aug_adv, diet_class=None
     )
-    log_test_evaluation(args, dataset, device, log_file)
+    evaluate(args, dataset, device, os.path.join(args.log_dir, "identifiability.txt"))

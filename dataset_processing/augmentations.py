@@ -116,10 +116,6 @@ def dsprites_augmentations(aug, img_size, adv=8 / 255):
                 use_reflection=True,  # set True if you want reflection invariance
             ),
         ]
-    adv_augmentations = augmentations.copy()
-    adv_augmentations.insert(
-        0, v2.Lambda(lambda x: x + torch.empty_like(x).uniform_(-adv, adv))
-    )
     train_augmentations = v2.Compose(augmentations)
-    adv_augmentations = v2.Compose(adv_augmentations)
+    adv_augmentations = v2.Lambda(lambda x: x + torch.empty_like(x).uniform_(-adv, adv))
     return train_augmentations, adv_augmentations

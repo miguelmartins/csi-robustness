@@ -19,6 +19,7 @@ from evaluation.identifiability import log_test_evaluation, log_validation
 from evaluation.logging import Args, setup_logging
 from models.baselines import get_model
 from torchvision.transforms import v2
+from evaluation.identifiability import evaluate
 
 
 def train(args, dataset, device, log_file):
@@ -136,8 +137,8 @@ if __name__ == "__main__":
         num_gpus = 0
         print("Using CPU")
 
-    aug, aug_adv = dsprites_augmentations(aug, 64, adv=8 / 255)
+    aug, aug_adv = dsprites_augmentations(aug, 64, adv=4 / 255)
     dataset = defaults.get_data(args, DislibDataset, aug=aug, aug_adv=aug_adv)
     if backbone != "image":
         train(args, dataset, device, log_file)
-    log_test_evaluation(args, dataset, device, log_file)
+    evaluate(args, dataset, device, os.path.join(args.log_dir, "identifiability.txt"))
