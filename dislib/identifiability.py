@@ -14,7 +14,7 @@ import torch
 import torch.nn as nn
 
 from dataset_processing.augmentations import dsprites_augmentations
-from dataset_processing.load_datasets import DislibDataset
+from dataset_processing.load_datasets import DislibDataset, RGBDataset
 from tqdm.auto import tqdm
 
 from evaluation.identifiability import evaluate, log_test_evaluation, log_validation
@@ -22,6 +22,7 @@ from evaluation.logging import Args, setup_logging
 from models.baselines import get_model
 from torchvision.transforms import v2
 from scipy.stats import pearsonr as corr
+from dataset_processing.augmentations import shapes3d_augmentations
 
 
 if __name__ == "__main__":
@@ -74,7 +75,15 @@ if __name__ == "__main__":
         num_gpus = 0
         print("Using CPU")
 
-    aug, aug_adv = dsprites_augmentations(aug, 64, adv=0.01)
-    dataset = defaults.get_data(args, DislibDataset, aug=v2.Identity(), aug_adv=aug_adv)
+    if args.dataset == "dsprites":
+        aug, aug_adv = dsprites_augmentations(aug, 64, adv=4 / 255)
+        dataset = defaults.get_data(
+            args, DislibDataset, aug=aug, aug_adv=aug_adv, diet_class=DietDataset
+        )
+    else:
+        aug, aug_adv = shapes3d_augmentations(aug, 64, adv=8 / 255)
+        dataset = defaults.get_data(
+            args, RGBDataset, aug=aug, aug_adv=aug_adv, diet_class=DietRGBDataset
+        )
     log_file = os.path.join(args.log_dir, "identifiability.txt")
     evaluate(args, dataset, device, log_file)

@@ -116,11 +116,10 @@ def log_test_evaluation(args, dataset, device, log_file):
 
 
 def evaluate(args, dataset, device, log_file):
-    with open(log_file, "a") as file:
+    with open(log_file, "w") as file:
         print("\n\nEvaluating:", file=file)
     (
         train_dataloader,
-        val_dataloader,
         test_dataloader,
         adv_test_dataloader,
         data,

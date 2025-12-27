@@ -1,4 +1,5 @@
 __pycache__/
+*.mat
 *.ipynb_checkpoints
 *.pyc
 *.npy

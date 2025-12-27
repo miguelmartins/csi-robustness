@@ -1,5 +1,6 @@
 .DS_STORE
 *.txt
+*.mat
 *.npy
 *.npz
 *.h5

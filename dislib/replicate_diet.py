@@ -10,8 +10,11 @@ import os
 import torch
 import torch.nn as nn
 
-from dataset_processing.augmentations import dsprites_augmentations
-from dataset_processing.load_datasets import DislibDataset
+from dataset_processing.augmentations import (
+    dsprites_augmentations,
+    shapes3d_augmentations,
+)
+from dataset_processing.load_datasets import DietRGBDataset, DislibDataset, RGBDataset
 from tqdm.auto import tqdm
 
 from evaluation.identifiability import log_test_evaluation, log_validation
@@ -29,8 +32,7 @@ def train(args, dataset, device, log_file):
         print("\n\nTraining:", file=file)
     (
         train_dataloader,
-        val_dataloader,
-        test_dataloader,
+        _,
         _,
         data,
         out_size,
@@ -40,16 +42,6 @@ def train(args, dataset, device, log_file):
 
     net = get_model(args.model, nc, out_size, device, args.seed)
     readout = nn.Linear(512, len(train_dataloader.dataset)).to(device)
-    # if torch.cuda.is_available():
-    #     device = torch.device("cuda")
-    #     num_gpus = torch.cuda.device_count()
-    # else:
-    #     num_gpus = 0
-    #
-    # # after creating net/readout:
-    # if num_gpus > 1:
-    #     net = nn.DataParallel(net)
-    #     readout = nn.DataParallel(readout)
     optimizer, scheduler = build_optimizer_and_scheduler(
         [net, readout], args.num_epochs
     )
@@ -125,14 +117,15 @@ if __name__ == "__main__":
         num_gpus = 0
         print("Using CPU")
 
-    aug, aug_adv = dsprites_augmentations(aug, 64, adv=4 / 255)
-    dataset = defaults.get_data(
-        args, DislibDataset, aug=aug, aug_adv=aug_adv, diet_class=DietDataset
-    )
+    if args.dataset == "dsprites":
+        aug, aug_adv = dsprites_augmentations(aug, 64, adv=4 / 255)
+        dataset = defaults.get_data(
+            args, DislibDataset, aug=aug, aug_adv=aug_adv, diet_class=DietDataset
+        )
+    else:
+        aug, aug_adv = shapes3d_augmentations(aug, 64, adv=8 / 255)
+        dataset = defaults.get_data(
+            args, RGBDataset, aug=aug, aug_adv=aug_adv, diet_class=DietRGBDataset
+        )
     if backbone != "image":
         train(args, dataset, device, log_file)
-    del dataset
-    dataset = defaults.get_data(
-        args, DislibDataset, aug=aug, aug_adv=aug_adv, diet_class=None
-    )
-    evaluate(args, dataset, device, os.path.join(args.log_dir, "identifiability.txt"))

@@ -4,7 +4,7 @@ set -euo pipefail
 mkdir -p logs_out
 
 # Define reps you want to run
-reps=(1 2)
+reps=(0 1 2)
 
 for rep in "${reps[@]}"; do
   echo "=== Starting rep=${rep} ==="
@@ -12,10 +12,14 @@ for rep in "${reps[@]}"; do
   pids=()
 
   # rep=${rep} batch: launch in background
-  CUDA_VISIBLE_DEVICES=0 nohup uv run dislib/replicate_diet.py --aug none      --rep "${rep}" --backbone cnn > "logs_out/none_rep${rep}.txt"      2>&1 & pids+=("$!")
-  CUDA_VISIBLE_DEVICES=0 nohup uv run dislib/replicate_diet.py --aug crop      --rep "${rep}" --backbone cnn > "logs_out/crop_rep${rep}.txt"      2>&1 & pids+=("$!")
-  CUDA_VISIBLE_DEVICES=1 nohup uv run dislib/replicate_diet.py --aug sup       --rep "${rep}" --backbone cnn > "logs_out/sup_rep${rep}.txt"       2>&1 & pids+=("$!")
-  CUDA_VISIBLE_DEVICES=1 nohup uv run dislib/replicate_diet.py --aug geom_crop --rep "${rep}" --backbone cnn > "logs_out/geom_crop_rep${rep}.txt" 2>&1 & pids+=("$!")
+  CUDA_VISIBLE_DEVICES=0 nohup uv run dislib/replicate_diet.py --dataset shapes3d --aug none      --rep "${rep}" --backbone cnn > "logs_out/shapes3d_none_rep${rep}.txt"      2>&1 & pids+=("$!")
+  CUDA_VISIBLE_DEVICES=0 nohup uv run dislib/replicate_diet.py --dataset shapes3d --aug crop      --rep "${rep}" --backbone cnn > "logs_out/shapes3d_crop_rep${rep}.txt"      2>&1 & pids+=("$!")
+  CUDA_VISIBLE_DEVICES=0 nohup uv run dislib/replicate_diet.py --dataset shapes3d --aug sup       --rep "${rep}" --backbone cnn > "logs_out/shapes3d_sup_rep${rep}.txt"       2>&1 & pids+=("$!")
+  CUDA_VISIBLE_DEVICES=1 nohup uv run dislib/replicate_diet.py --dataset shapes3d --aug sup2       --rep "${rep}" --backbone cnn > "logs_out/shapes3d_dus_rep${rep}.txt"       2>&1 & pids+=("$!")
+  CUDA_VISIBLE_DEVICES=1 nohup uv run dislib/replicate_diet.py --dataset shapes3d --aug simclr2       --rep "${rep}" --backbone cnn > "logs_out/shapes3d_simclr_rep${rep}.txt"       2>&1 & pids+=("$!")
+  CUDA_VISIBLE_DEVICES=1 nohup uv run dislib/replicate_diet.py --dataset shapes3d --aug simclr3       --rep "${rep}" --backbone cnn > "logs_out/shapes3d_simclr_rep${rep}.txt"       2>&1 & pids+=("$!")
+
+
 
   # Barrier: only continue when all jobs of this rep finished
   for pid in "${pids[@]}"; do

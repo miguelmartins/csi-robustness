@@ -83,19 +83,16 @@ def get_data(args, dataset_class, aug, aug_adv, diet_class=None):
 
     np.random.seed(args.seed)
     indices = np.random.choice(N, N, replace=False)
-    val_ind = indices[:num_val]
-    test_ind = indices[num_val : num_val + num_test]
+    test_ind = indices[: num_val + num_test]
     train_ind = indices[num_val + num_test :]
 
     print(
-        "num_val",
-        len(val_ind),
         "num_test",
         len(test_ind),
         "num_train",
         len(train_ind),
         "sum",
-        len(val_ind) + len(test_ind) + len(train_ind),
+        len(test_ind) + len(test_ind) + len(train_ind),
     )
 
     # legacy, encode variables in numerical
@@ -123,16 +120,12 @@ def get_data(args, dataset_class, aug, aug_adv, diet_class=None):
             images[train_ind], torch.tensor(targets[train_ind]), augmentations=aug
         )
 
-    val_data = dataset_class(
-        images[val_ind],
-        torch.tensor(targets[val_ind]),
-    )
     test_data = dataset_class(
         images[test_ind],
         torch.tensor(targets[test_ind]),
     )
     adv_test_data = dataset_class(
-        images[train_ind], torch.tensor(targets[train_ind]), augmentations=aug_adv
+        images[test_ind], torch.tensor(targets[test_ind]), augmentations=aug_adv
     )
     train_dataloader = torch.utils.data.DataLoader(
         train_data,
@@ -145,27 +138,6 @@ def get_data(args, dataset_class, aug, aug_adv, diet_class=None):
         drop_last=True,
     )
 
-    # train_diet_dataloader = DataLoader(
-    #     train_data_diet,
-    #     batch_size=args.batch_size,
-    #     shuffle=True,
-    #     multiprocessing_context="fork",
-    #     prefetch_factor=4,
-    #     persistent_workers=True,
-    #     num_workers=8,
-    #     drop_last=True,
-    # )
-
-    val_dataloader = torch.utils.data.DataLoader(
-        val_data,
-        batch_size=args.batch_size,
-        shuffle=True,
-        multiprocessing_context="fork",
-        prefetch_factor=4,
-        persistent_workers=True,
-        num_workers=8,
-        drop_last=False,
-    )
     test_dataloader = torch.utils.data.DataLoader(
         test_data,
         batch_size=args.batch_size,
@@ -205,7 +177,6 @@ def get_data(args, dataset_class, aug, aug_adv, diet_class=None):
 
     return (
         train_dataloader,
-        val_dataloader,
         test_dataloader,
         adv_test_dataloader,
         data,

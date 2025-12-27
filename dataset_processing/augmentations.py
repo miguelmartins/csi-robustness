@@ -65,6 +65,24 @@ def dsprites_augmentations(aug, img_size, adv=8 / 255):
             v2.Lambda(lambda x: (x > 0.5).to(x.dtype)),
             v2.RandomHorizontalFlip(),
         ]
+    elif aug == "sup2":
+        augmentations = [
+            v2.RandomResizedCrop(
+                img_size, scale=(0.08, 1.0), interpolation=v2.InterpolationMode.NEAREST
+            ),
+            v2.Lambda(lambda x: (x > 0.5).to(x.dtype)),
+            v2.RandomHorizontalFlip(),
+            v2.RandomVerticalFlip(),
+        ]
+    elif aug == "sup2":
+        augmentations = [
+            v2.RandomResizedCrop(
+                img_size, scale=(0.08, 1.0), interpolation=v2.InterpolationMode.NEAREST
+            ),
+            v2.Lambda(lambda x: (x > 0.5).to(x.dtype)),
+            v2.RandomHorizontalFlip(),
+            v2.RandomVerticalFlip(),
+        ]
     elif aug == "simclr":
         augmentations = [
             v2.RandomResizedCrop(
@@ -93,6 +111,105 @@ def dsprites_augmentations(aug, img_size, adv=8 / 255):
             v2.RandomHorizontalFlip(),
             stronger_distortion(),
         ]
+    elif aug == "geom":
+        # Example usage:
+        augmentations = [
+            dsprites_symmetries(
+                out_size=img_size,
+                max_translate_frac=0.30,
+                max_rotate_deg=180.0,
+                use_reflection=True,  # set True if you want reflection invariance
+            )
+        ]
+    elif aug == "geom_crop":
+        # Example usage:
+        augmentations = [
+            v2.RandomResizedCrop(
+                img_size, scale=(0.08, 1.0)
+            ),  # the interpolation and thresholding is done inside dsprites_symmetries
+            dsprites_symmetries(
+                out_size=img_size,
+                max_translate_frac=0.30,
+                max_rotate_deg=180.0,
+                use_reflection=True,  # set True if you want reflection invariance
+            ),
+        ]
+    train_augmentations = v2.Compose(augmentations)
+    adv_augmentations = v2.Lambda(lambda x: x + torch.empty_like(x).uniform_(-adv, adv))
+    return train_augmentations, adv_augmentations
+
+
+def shapes3d_augmentations(aug, img_size, adv=8 / 255):
+    def get_color_distortion(s=0.5):  # 0.5 for CIFAR10 by default
+        # s is the strength of color distortion
+        jitter = v2.RandomApply(
+            [v2.ColorJitter(0.8 * s, 0.8 * s, 0.8 * s, 0.2 * s)], p=0.8
+        )
+        grayscale = v2.RandomGrayscale(p=0.2)
+        return [jitter, grayscale]
+
+    def stronger_distortion():
+        # Check Fig. 10 of https://arxiv.org/pdf/2203.13457
+        jitter = v2.RandomApply([v2.ColorJitter(1.0, 1.0, 1.0, 0.5)])
+        grayscale = v2.RandomGrayscale(p=0.5)
+        return [jitter, grayscale]
+
+    if aug == "none":
+        augmentations = [v2.Identity()]
+    elif aug == "crop":
+        augmentations = [
+            v2.RandomResizedCrop(
+                img_size, scale=(0.08, 1.0), interpolation=v2.InterpolationMode.NEAREST
+            ),
+        ]
+    elif aug == "sup":
+        augmentations = [
+            v2.RandomResizedCrop(
+                img_size, scale=(0.08, 1.0), interpolation=v2.InterpolationMode.NEAREST
+            ),
+            v2.RandomHorizontalFlip(),
+        ]
+    elif aug == "dus":
+        augmentations = [
+            v2.RandomResizedCrop(
+                img_size, scale=(0.08, 1.0), interpolation=v2.InterpolationMode.NEAREST
+            ),
+            v2.RandomVerticalFlip(),
+        ]
+    elif aug == "sup2":
+        augmentations = [
+            v2.RandomResizedCrop(
+                img_size, scale=(0.08, 1.0), interpolation=v2.InterpolationMode.NEAREST
+            ),
+            v2.RandomHorizontalFlip(),
+            v2.RandomVerticalFlip(),
+        ]
+    elif aug == "simclr":
+        augmentations = [
+            v2.RandomResizedCrop(
+                img_size, scale=(0.08, 1.0), interpolation=v2.InterpolationMode.NEAREST
+            ),
+            v2.RandomHorizontalFlip(),
+        ] + get_color_distortion(s=0.5)
+
+    elif aug == "simclr2":
+        augmentations = [
+            v2.RandomResizedCrop(
+                img_size,
+                scale=(0.08, 1.0),
+                interpolation=v2.InterpolationMode.NEAREST,
+            ),
+            v2.RandomHorizontalFlip(),
+            v2.RandomVerticalFlip(),
+        ] + get_color_distortion(s=1.0)
+    elif aug == "simclr3":
+        augmentations = [
+            v2.RandomResizedCrop(
+                img_size, scale=(0.08, 1.0), interpolation=v2.InterpolationMode.NEAREST
+            ),
+            v2.RandomHorizontalFlip(),
+            v2.RandomVerticalFlip(),
+        ] + stronger_distortion()
     elif aug == "geom":
         # Example usage:
         augmentations = [

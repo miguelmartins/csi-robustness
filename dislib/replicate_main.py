@@ -20,6 +20,8 @@ from evaluation.logging import Args, setup_logging
 from models.baselines import get_model
 from torchvision.transforms import v2
 from evaluation.identifiability import evaluate
+from dataset_processing.load_datasets import RGBDataset
+from dataset_processing.augmentations import shapes3d_augmentations
 
 
 def train(args, dataset, device, log_file):
@@ -137,8 +139,16 @@ if __name__ == "__main__":
         num_gpus = 0
         print("Using CPU")
 
-    aug, aug_adv = dsprites_augmentations(aug, 64, adv=4 / 255)
-    dataset = defaults.get_data(args, DislibDataset, aug=aug, aug_adv=aug_adv)
+    if args.dataset == "dsprites":
+        aug, aug_adv = dsprites_augmentations(aug, 64, adv=4 / 255)
+        dataset = defaults.get_data(
+            args, DislibDataset, aug=aug, aug_adv=aug_adv, diet_class=None
+        )
+    else:
+        aug, aug_adv = shapes3d_augmentations(aug, 64, adv=4 / 255)
+        dataset = defaults.get_data(
+            args, RGBDataset, aug=aug, aug_adv=aug_adv, diet_class=None
+        )
     if backbone != "image":
         train(args, dataset, device, log_file)
     evaluate(args, dataset, device, os.path.join(args.log_dir, "identifiability.txt"))

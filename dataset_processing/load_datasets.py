@@ -32,39 +32,6 @@ class DietDataset(torch.utils.data.Dataset):
         return len(self.images)
 
 
-class DietRGBDataset(torch.utils.data.Dataset):
-    def __init__(
-        self,
-        images,
-        labels,
-        normalize=v2.Lambda(lambda x: x / 255.0),
-        augmentations=None,
-    ):
-        super().__init__()
-        self.images = images
-        self.augmentations = augmentations
-        if augmentations is None:
-            self.transform = v2.Compose(
-                [v2.ToImage(), v2.ToDtype(torch.float32, scale=False), normalize]
-            )
-        else:
-            self.transform = v2.Compose(
-                [
-                    v2.ToImage(),
-                    v2.ToDtype(torch.float32, scale=False),
-                    augmentations,
-                    normalize,
-                ]
-            )
-
-    def __getitem__(self, idx):
-        x = self.images[idx]
-        return self.transform(x), idx
-
-    def __len__(self):
-        return len(self.images)
-
-
 class DislibDataset(torch.utils.data.Dataset):
     def __init__(
         self,
@@ -107,7 +74,7 @@ class RGBDataset(torch.utils.data.Dataset):
         self,
         images,
         labels,
-        normalize=v2.Lambda(lambda x: x / 255.0),
+        normalize=v2.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
         augmentations=None,
     ) -> None:
         super().__init__()
@@ -116,13 +83,17 @@ class RGBDataset(torch.utils.data.Dataset):
         self.augmentations = augmentations
         if augmentations is None:
             self.transform = v2.Compose(
-                [v2.ToImage(), v2.ToDtype(torch.float32, scale=False), normalize]
+                [
+                    v2.ToImage(),
+                    v2.ToDtype(torch.float32, scale=True),
+                    normalize,
+                ]  # [0, 255] -> [0., 1.]
             )
         else:
             self.transform = v2.Compose(
                 [
                     v2.ToImage(),
-                    v2.ToDtype(torch.float32, scale=False),
+                    v2.ToDtype(torch.float32, scale=True),
                     augmentations,
                     normalize,
                 ]
@@ -138,3 +109,40 @@ class RGBDataset(torch.utils.data.Dataset):
         if self.transform is not None:
             x = self.transform(x)
         return x, y
+
+
+class DietRGBDataset(torch.utils.data.Dataset):
+    def __init__(
+        self,
+        images,
+        labels,
+        normalize=v2.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
+        augmentations=None,
+    ):
+        super().__init__()
+        self.images = images
+        self.augmentations = augmentations
+        if augmentations is None:
+            self.transform = v2.Compose(
+                [
+                    v2.ToImage(),
+                    v2.ToDtype(torch.float32, scale=True),
+                    normalize,
+                ]
+            )
+        else:
+            self.transform = v2.Compose(
+                [
+                    v2.ToImage(),
+                    v2.ToDtype(torch.float32, scale=True),
+                    augmentations,
+                    normalize,
+                ]
+            )
+
+    def __getitem__(self, idx):
+        x = self.images[idx]
+        return self.transform(x), idx
+
+    def __len__(self):
+        return len(self.images)
