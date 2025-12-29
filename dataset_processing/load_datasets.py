@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from torch.nn import init
 from torchvision.transforms import v2
 
 
@@ -146,3 +147,62 @@ class DietRGBDataset(torch.utils.data.Dataset):
 
     def __len__(self):
         return len(self.images)
+
+
+class MPI3DDataset(RGBDataset):
+    def __init__(
+        self,
+        images,
+        labels,
+        normalize=v2.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
+        augmentations=None,
+    ) -> None:
+        self.images = images
+        self.labels = labels
+        self.augmentations = augmentations
+        if augmentations is None:
+            self.transform = v2.Compose(
+                [
+                    v2.ToImage(),
+                    v2.ToDtype(torch.float32, scale=False),
+                    normalize,
+                ]  # [0, 255] -> [0., 1.]
+            )
+        else:
+            self.transform = v2.Compose(
+                [
+                    v2.ToImage(),
+                    v2.ToDtype(torch.float32, scale=False),
+                    augmentations,
+                    normalize,
+                ]
+            )
+
+
+class DietMPI3DDataset(DietRGBDataset):
+    def __init__(
+        self,
+        images,
+        labels,
+        normalize=v2.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
+        augmentations=None,
+    ):
+        self.images = images
+        self.augmentations = augmentations
+        if augmentations is None:
+            self.transform = v2.Compose(
+                [
+                    v2.ToImage(),
+                    v2.ToDtype(torch.float32, scale=False),
+                    normalize,
+                ]
+            )
+        else:
+            self.transform = v2.Compose(
+                [
+                    v2.ToImage(),
+                    v2.ToDtype(torch.float32, scale=False),
+                    augmentations,
+                    normalize,
+                ]
+            )

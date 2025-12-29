@@ -14,7 +14,7 @@ import torch
 import torch.nn as nn
 
 from dataset_processing.augmentations import dsprites_augmentations
-from dataset_processing.load_datasets import DislibDataset, RGBDataset
+from dataset_processing.load_datasets import DislibDataset, MPI3DDataset, RGBDataset
 from tqdm.auto import tqdm
 
 from evaluation.identifiability import evaluate, log_test_evaluation, log_validation
@@ -78,12 +78,17 @@ if __name__ == "__main__":
     if args.dataset == "dsprites":
         aug, aug_adv = dsprites_augmentations(aug, 64, adv=4 / 255)
         dataset = defaults.get_data(
-            args, DislibDataset, aug=aug, aug_adv=aug_adv, diet_class=DietDataset
+            args, DislibDataset, aug=aug, aug_adv=aug_adv, diet_class=None
+        )
+    elif args.dataset == "shapes3d":
+        aug, aug_adv = shapes3d_augmentations(aug, 64, adv=8 / 255)
+        dataset = defaults.get_data(
+            args, RGBDataset, aug=aug, aug_adv=aug_adv, diet_class=None
         )
     else:
         aug, aug_adv = shapes3d_augmentations(aug, 64, adv=8 / 255)
         dataset = defaults.get_data(
-            args, RGBDataset, aug=aug, aug_adv=aug_adv, diet_class=DietRGBDataset
+            args, MPI3DDataset, aug=aug, aug_adv=aug_adv, diet_class=None
         )
     log_file = os.path.join(args.log_dir, "identifiability.txt")
     evaluate(args, dataset, device, log_file)

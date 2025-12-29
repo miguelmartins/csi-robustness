@@ -14,7 +14,13 @@ from dataset_processing.augmentations import (
     dsprites_augmentations,
     shapes3d_augmentations,
 )
-from dataset_processing.load_datasets import DietRGBDataset, DislibDataset, RGBDataset
+from dataset_processing.load_datasets import (
+    DietMPI3DDataset,
+    DietRGBDataset,
+    DislibDataset,
+    MPI3DDataset,
+    RGBDataset,
+)
 from tqdm.auto import tqdm
 
 from evaluation.identifiability import log_test_evaluation, log_validation
@@ -122,10 +128,15 @@ if __name__ == "__main__":
         dataset = defaults.get_data(
             args, DislibDataset, aug=aug, aug_adv=aug_adv, diet_class=DietDataset
         )
-    else:
+    elif args.dataset == "shapes3d":
         aug, aug_adv = shapes3d_augmentations(aug, 64, adv=8 / 255)
         dataset = defaults.get_data(
             args, RGBDataset, aug=aug, aug_adv=aug_adv, diet_class=DietRGBDataset
+        )
+    else:
+        aug, aug_adv = shapes3d_augmentations(aug, 64, adv=8 / 255)
+        dataset = defaults.get_data(
+            args, MPI3DDataset, aug=aug, aug_adv=aug_adv, diet_class=DietMPI3DDataset
         )
     if backbone != "image":
         train(args, dataset, device, log_file)
