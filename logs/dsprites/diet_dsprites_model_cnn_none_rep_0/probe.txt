@@ -1,0 +1,51 @@
+
+
+Training:
+acc 0.3259006
+
+
+Evaluating:
+Coordinate 0 shape 
+train PearsonRResult(statistic=np.float32(nan), pvalue=np.float64(nan)) 
+val PearsonRResult(statistic=np.float32(nan), pvalue=np.float64(nan)) 
+adv PearsonRResult(statistic=np.float32(nan), pvalue=np.float64(nan))
+Coordinate 1 scale 
+train PearsonRResult(statistic=np.float32(nan), pvalue=np.float64(nan)) 
+val PearsonRResult(statistic=np.float32(nan), pvalue=np.float64(nan)) 
+adv PearsonRResult(statistic=np.float32(nan), pvalue=np.float64(nan))
+Coordinate 2 orientation 
+train PearsonRResult(statistic=np.float32(nan), pvalue=np.float64(nan)) 
+val PearsonRResult(statistic=np.float32(nan), pvalue=np.float64(nan)) 
+adv PearsonRResult(statistic=np.float32(nan), pvalue=np.float64(nan))
+Coordinate 3 posX 
+train PearsonRResult(statistic=np.float32(nan), pvalue=np.float64(nan)) 
+val PearsonRResult(statistic=np.float32(nan), pvalue=np.float64(nan)) 
+adv PearsonRResult(statistic=np.float32(nan), pvalue=np.float64(nan))
+Coordinate 4 posY 
+train PearsonRResult(statistic=np.float32(nan), pvalue=np.float64(nan)) 
+val PearsonRResult(statistic=np.float32(nan), pvalue=np.float64(nan)) 
+adv PearsonRResult(statistic=np.float32(nan), pvalue=np.float64(nan))
+
+
+Evaluating:
+
+
+Evaluating:
+
+
+Evaluating:
+
+
+Evaluating:
+
+
+Evaluating:
+
+
+Evaluating:
+
+
+Evaluating:
+
+
+Evaluating:

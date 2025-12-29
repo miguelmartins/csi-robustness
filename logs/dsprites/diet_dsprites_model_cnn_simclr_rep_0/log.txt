@@ -1,0 +1,13 @@
+Args:
+dataset: dsprites
+seed: 42
+batch_size: 512
+model: cnn
+lr: 0.001
+num_epochs: 100
+log_dir: ./logs/diet_dsprites_model_cnn_simclr_rep_0
+debug: False
+probe: False
+
+
+Training:

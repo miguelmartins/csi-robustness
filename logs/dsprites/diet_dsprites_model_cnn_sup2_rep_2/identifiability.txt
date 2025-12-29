@@ -1,0 +1,23 @@
+
+
+Evaluating:
+Coordinate 0 shape 
+train PearsonRResult(statistic=np.float64(0.9610510226856437), pvalue=np.float64(0.0)) 
+val PearsonRResult(statistic=np.float64(0.9611382598887567), pvalue=np.float64(0.0)) 
+adv PearsonRResult(statistic=np.float64(0.8847954785543387), pvalue=np.float64(0.0))
+Coordinate 1 scale 
+train PearsonRResult(statistic=np.float64(0.9455807700908598), pvalue=np.float64(0.0)) 
+val PearsonRResult(statistic=np.float64(0.9457589536447564), pvalue=np.float64(0.0)) 
+adv PearsonRResult(statistic=np.float64(0.8909554837730527), pvalue=np.float64(0.0))
+Coordinate 2 orientation 
+train PearsonRResult(statistic=np.float64(0.045125563253696266), pvalue=np.float64(1.9413538119715316e-263)) 
+val PearsonRResult(statistic=np.float64(0.03526561984514048), pvalue=np.float64(8.355685647616516e-42)) 
+adv PearsonRResult(statistic=np.float64(0.019778728420227633), pvalue=np.float64(3.06108728298046e-14))
+Coordinate 3 posX 
+train PearsonRResult(statistic=np.float64(0.122523531187653), pvalue=np.float64(0.0)) 
+val PearsonRResult(statistic=np.float64(0.1177945987259395), pvalue=np.float64(0.0)) 
+adv PearsonRResult(statistic=np.float64(0.08034598661284939), pvalue=np.float64(1.1033710697205742e-209))
+Coordinate 4 posY 
+train PearsonRResult(statistic=np.float64(0.15273102589884516), pvalue=np.float64(0.0)) 
+val PearsonRResult(statistic=np.float64(0.15190957664026572), pvalue=np.float64(0.0)) 
+adv PearsonRResult(statistic=np.float64(0.17054472996081843), pvalue=np.float64(0.0))
