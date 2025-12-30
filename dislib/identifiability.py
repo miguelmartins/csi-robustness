@@ -76,12 +76,12 @@ if __name__ == "__main__":
         print("Using CPU")
 
     if args.dataset == "dsprites":
-        aug, aug_adv = dsprites_augmentations(aug, 64, adv=4 / 255)
+        aug, aug_adv = dsprites_augmentations(aug, 64, adv=8 / 255)
         dataset = defaults.get_data(
             args, DislibDataset, aug=aug, aug_adv=aug_adv, diet_class=None
         )
     elif args.dataset == "shapes3d":
-        aug, aug_adv = shapes3d_augmentations(aug, 64, adv=8 / 255)
+        aug, aug_adv = shapes3d_augmentations(aug, 64, adv=16 / 255)
         dataset = defaults.get_data(
             args, RGBDataset, aug=aug, aug_adv=aug_adv, diet_class=None
         )

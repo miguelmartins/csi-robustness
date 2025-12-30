@@ -22,6 +22,9 @@ from evaluation.logging import Args, setup_logging
 from models.baselines import get_model
 from torchvision.transforms import v2
 from evaluation.identifiability import evaluate
+from dataset_processing.augmentations import shapes3d_augmentations
+from dataset_processing.load_datasets import RGBDataset
+from dataset_processing.load_datasets import MPI3DDataset
 
 
 def inference(args, dataset, device, log_file):
@@ -29,7 +32,6 @@ def inference(args, dataset, device, log_file):
         print("\n\nTraining:", file=file)
     (
         train_dataloader,
-        val_dataloader,
         test_dataloader,
         adv_test_dataloader,
         data,
@@ -44,7 +46,9 @@ def inference(args, dataset, device, log_file):
     probe = nn.Linear(512, out_size).to(device)
     optimizer = torch.optim.Adam(list(probe.parameters()), lr=args.lr)
     criterion = nn.CrossEntropyLoss()
-
+    epochs_no_improve = 0
+    patience = 10
+    min_delta = 0.001
     best_val_acc = 0
     for epoch in range(args.num_epochs):
         probe.train()
@@ -59,9 +63,6 @@ def inference(args, dataset, device, log_file):
             y = y.to(device)  # .to(torch.long)
             z = net(x)
             y_ = probe(z)
-            if args.debug:
-                print("y", y.shape, y.dtype, y.min(), y.max(), y)
-                print("y_", y_.shape, y_.dtype, y_.min(), y_.max(), y_)
             loss = criterion(y_, y[:, cat_ind].to(device))
             optimizer.zero_grad()
             loss.backward()
@@ -73,7 +74,7 @@ def inference(args, dataset, device, log_file):
 
         probe.eval()
         val_acc = log_validation(
-            dataloader=val_dataloader,
+            dataloader=test_dataloader,
             net=net,
             readout=probe,
             data=data,
@@ -85,9 +86,12 @@ def inference(args, dataset, device, log_file):
             print(
                 "Epoch", epoch, "Loss", np.mean(run_loss), "val_acc", val_acc, file=file
             )
-        if val_acc > best_val_acc:
+        if val_acc > best_val_acc + min_delta:
             best_val_acc = val_acc
+            epochs_no_improve = 0
             torch.save(probe.state_dict(), os.path.join(args.log_dir, "probe.pth"))
+        else:
+            epochs_no_improve += 1
 
         def final_logs():
             with open(log_file, "a") as file:
@@ -133,7 +137,9 @@ def inference(args, dataset, device, log_file):
             # change get_data instead of this
             final_logs()
             return
-        final_logs()
+        if epochs_no_improve >= patience:
+            final_logs()
+            return
 
 
 if __name__ == "__main__":
@@ -186,8 +192,21 @@ if __name__ == "__main__":
         num_gpus = 0
         print("Using CPU")
 
-    aug, aug_adv = dsprites_augmentations(aug, 64, adv=8 / 255)
-    dataset = defaults.get_data(args, DislibDataset, aug=v2.Identity(), aug_adv=aug_adv)
+    if args.dataset == "dsprites":
+        _, aug_adv = dsprites_augmentations(aug, 64, adv=4 / 255)
+        dataset = defaults.get_data(
+            args, DislibDataset, aug=v2.Identity(), aug_adv=aug_adv, diet_class=None
+        )
+    elif args.dataset == "shapes3d":
+        _, aug_adv = shapes3d_augmentations(aug, 64, adv=8 / 255)
+        dataset = defaults.get_data(
+            args, RGBDataset, aug=v2.Identity(), aug_adv=aug_adv, diet_class=None
+        )
+    else:
+        _, aug_adv = shapes3d_augmentations(aug, 64, adv=8 / 255)
+        dataset = defaults.get_data(
+            args, MPI3DDataset, aug=v2.Identity(), aug_adv=aug_adv, diet_class=None
+        )
     log_file = os.path.join(args.log_dir, "probe.txt")
     if backbone != "image":
         inference(args, dataset, device, log_file)

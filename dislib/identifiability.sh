@@ -1,18 +1,12 @@
 #!/bin/bash
-uv run dislib/identifiability.py --rep 0 --aug "none" --dataset shapes3d
-uv run dislib/identifiability.py --rep 0 --aug "crop" --dataset shapes3d
-uv run dislib/identifiability.py --rep 0 --aug "sup" --dataset shapes3d
-uv run dislib/identifiability.py --rep 0 --aug "sup2" --dataset shapes3d
-uv run dislib/identifiability.py --rep 0 --aug "simclr2" --dataset shapes3d
 
-uv run dislib/identifiability.py --rep 1 --aug "none" --dataset shapes3d
-uv run dislib/identifiability.py --rep 1 --aug "crop" --dataset shapes3d
-uv run dislib/identifiability.py --rep 1 --aug "sup" --dataset shapes3d
-uv run dislib/identifiability.py --rep 1 --aug "sup2" --dataset shapes3d
-uv run dislib/identifiability.py --rep 1 --aug "simclr2" --dataset shapes3d
+DATASET="shapes3d"
 
-uv run dislib/identifiability.py --rep 2 --aug "none" --dataset shapes3d
-uv run dislib/identifiability.py --rep 2 --aug "crop" --dataset shapes3d
-uv run dislib/identifiability.py --rep 2 --aug "sup" --dataset shapes3d
-uv run dislib/identifiability.py --rep 2 --aug "sup2" --dataset shapes3d
-uv run dislib/identifiability.py --rep 2 --aug "simclr2" --dataset shapes3d
+for REP in 0 1 2; do
+  uv run dislib/identifiability.py --rep "$REP" --aug "none"     --dataset "$DATASET"
+  uv run dislib/identifiability.py --rep "$REP" --aug "crop"     --dataset "$DATASET"
+  uv run dislib/identifiability.py --rep "$REP" --aug "sup"      --dataset "$DATASET"
+  uv run dislib/identifiability.py --rep "$REP" --aug "sup2"     --dataset "$DATASET"
+  uv run dislib/identifiability.py --rep "$REP" --aug "simclr2"  --dataset "$DATASET"
+done
+
