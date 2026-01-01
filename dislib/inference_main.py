@@ -210,4 +210,3 @@ if __name__ == "__main__":
     log_file = os.path.join(args.log_dir, "probe.txt")
     if backbone != "image":
         inference(args, dataset, device, log_file)
-    evaluate(args, dataset, device, os.path.join(args.log_dir, "identifiability.txt"))

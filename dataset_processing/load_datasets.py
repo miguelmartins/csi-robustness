@@ -4,13 +4,12 @@ from torch.nn import init
 from torchvision.transforms import v2
 
 
-# TODO make abstract class that works on all datasets
-class DietDataset(torch.utils.data.Dataset):
+class DietGrayDataset(torch.utils.data.Dataset):
     def __init__(
         self,
         images,
         labels,
-        normalize=v2.ToDtype(torch.float32, scale=False),
+        normalize=v2.Normalize(mean=[0.5], std=[0.5]),
         augmentations=None,
     ):
         super().__init__()
@@ -18,11 +17,88 @@ class DietDataset(torch.utils.data.Dataset):
         self.augmentations = augmentations
         if augmentations is None:
             self.transform = v2.Compose(
-                [v2.ToImage(), v2.ToDtype(torch.float32, scale=False)]
+                [v2.ToImage(), v2.ToDtype(torch.float32, scale=True), normalize]
             )
         else:
             self.transform = v2.Compose(
-                [v2.ToImage(), v2.ToDtype(torch.float32, scale=False), augmentations]
+                [
+                    v2.ToImage(),
+                    v2.ToDtype(torch.float32, scale=True),
+                    augmentations,
+                    normalize,
+                ]
+            )
+
+    def __getitem__(self, idx):
+        x = self.images[idx]
+        return self.transform(x), idx
+
+    def __len__(self):
+        return len(self.images)
+
+
+class GrayDataset(torch.utils.data.Dataset):
+    def __init__(
+        self,
+        images,
+        labels,
+        normalize=v2.Normalize(mean=[0.5], std=[0.5]),
+        augmentations=None,
+    ) -> None:
+        super().__init__()
+        self.images = images
+        self.labels = labels
+        self.augmentations = augmentations
+        if augmentations is None:
+            self.transform = v2.Compose(
+                [v2.ToImage(), v2.ToDtype(torch.float32, scale=True), normalize]
+            )
+        else:
+            self.transform = v2.Compose(
+                [
+                    v2.ToImage(),
+                    v2.ToDtype(torch.float32, scale=True),
+                    augmentations,
+                    normalize,
+                ]
+            )
+
+    def __len__(self):
+        return len(self.images)
+
+    def __getitem__(self, idx):
+        x = self.images[idx]
+        y = self.labels[idx]
+
+        if self.transform is not None:
+            x = self.transform(x)
+        return x, y
+
+
+# TODO make abstract class that works on all datasets
+class DietDataset(torch.utils.data.Dataset):
+    def __init__(
+        self,
+        images,
+        labels,
+        normalize=v2.Normalize(mean=[0.5], std=[0.5]),
+        augmentations=None,
+    ):
+        super().__init__()
+        self.images = images
+        self.augmentations = augmentations
+        if augmentations is None:
+            self.transform = v2.Compose(
+                [v2.ToImage(), v2.ToDtype(torch.float32, scale=False), normalize]
+            )
+        else:
+            self.transform = v2.Compose(
+                [
+                    v2.ToImage(),
+                    v2.ToDtype(torch.float32, scale=False),
+                    augmentations,
+                    normalize,
+                ]
             )
 
     def __getitem__(self, idx):
@@ -38,7 +114,7 @@ class DislibDataset(torch.utils.data.Dataset):
         self,
         images,
         labels,
-        normalize=v2.ToDtype(torch.float32, scale=False),
+        normalize=v2.Normalize(mean=[0.5], std=[0.5]),
         augmentations=None,
     ) -> None:
         super().__init__()
@@ -47,7 +123,7 @@ class DislibDataset(torch.utils.data.Dataset):
         self.augmentations = augmentations
         if augmentations is None:
             self.transform = v2.Compose(
-                [v2.ToImage(), v2.ToDtype(torch.float32, scale=False)]
+                [v2.ToImage(), v2.ToDtype(torch.float32, scale=False), normalize]
             )
         else:
             self.transform = v2.Compose(
@@ -55,6 +131,7 @@ class DislibDataset(torch.utils.data.Dataset):
                     v2.ToImage(),
                     v2.ToDtype(torch.float32, scale=False),
                     augmentations,
+                    normalize,
                 ]
             )
 

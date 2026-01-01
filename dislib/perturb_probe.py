@@ -1,9 +1,11 @@
-# 0: make it so it does not delete the directory
-# 1: modify train and evaluate
-# 2: modify np.linalg.pinv to torch
-# 3: adapt to DIET
-# 4: run all combinations
-# 5: start working on next dataset
+# 0: add extra argument on inference for unsup/sup
+# 0: INFERENCE SHOULD HAVE NO AUGMENTATIONS
+# 1: Implement color augs with gaussian blur
+# 2: Implement Diet strength augs
+# 3. See how they interact with random noise attack
+# 4. See if we can have bigger batch size for diet
+# 5: run all combinations
+# 6: mention LeJEPA as a proof that the best downstream risk has to be isotropic Gaussian and that poses id. issues
 import argparse
 import dislib.defaults as defaults
 import numpy as np
@@ -12,7 +14,7 @@ import torch
 import torch.nn as nn
 
 from dataset_processing.augmentations import dsprites_augmentations
-from dataset_processing.load_datasets import DislibDataset, GrayDataset
+from dataset_processing.load_datasets import DislibDataset
 from tqdm.auto import tqdm
 
 from evaluation.identifiability import log_test_evaluation, log_validation
@@ -20,18 +22,19 @@ from evaluation.logging import Args, setup_logging
 from models.baselines import get_model
 from torchvision.transforms import v2
 from evaluation.identifiability import evaluate
-from dataset_processing.load_datasets import RGBDataset
 from dataset_processing.augmentations import shapes3d_augmentations
+from dataset_processing.load_datasets import RGBDataset
+from dataset_processing.load_datasets import MPI3DDataset
+from dataset_processing.load_datasets import GrayDataset
 
 
-def train(args, dataset, device, log_file):
-    with open(log_file, "a") as file:
+def run_probe(args, dataset, device, log_file, noise):
+    with open(log_file, "w") as file:
         print("\n\nTraining:", file=file)
     (
         train_dataloader,
-        val_dataloader,
         test_dataloader,
-        _,
+        adv_test_dataloader,
         data,
         out_size,
         nc,
@@ -39,63 +42,45 @@ def train(args, dataset, device, log_file):
     ) = dataset
 
     net = get_model(args.model, nc, out_size, device, args.seed)
-    readout = nn.Linear(512, out_size).to(device)
+    net.load_state_dict(torch.load(os.path.join(args.log_dir, "model.pth")))
+    net.eval()
+    probe = nn.Linear(512, out_size).to(device)
+    probe.load_state_dict(torch.load(os.path.join(args.log_dir, "probe.pth")))
+    probe.eval()
+    epochs_no_improve = 0
 
-    optimizer = torch.optim.Adam(
-        list(net.parameters()) + list(readout.parameters()), lr=args.lr
-    )
-    criterion = nn.CrossEntropyLoss()
-
-    best_val_acc = 0
-    for epoch in range(args.num_epochs):
-        net.train()
-        run_loss = []
-        progress_bar = tqdm(
-            train_dataloader,
-            total=len(train_dataloader),
-            desc=f"Epoch {epoch + 1}/{args.num_epochs}",
-        )
-        for x, y in progress_bar:
-            x = x.to(device)  # .to(torch.float32).to(device)
-            y = y.to(device)  # .to(torch.long)
-            z = net(x)
-            y_ = readout(z)
-            if args.debug:
-                print("y", y.shape, y.dtype, y.min(), y.max(), y)
-                print("y_", y_.shape, y_.dtype, y_.min(), y_.max(), y_)
-            loss = criterion(y_, y[:, cat_ind].to(device))
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            run_loss.append(loss.item())
-            progress_bar.set_postfix(loss=np.mean(run_loss))
-            if args.debug:
-                break
-
-        net.eval()
-        val_acc = log_validation(
-            dataloader=val_dataloader,
+    probe.eval()
+    with open(log_file, "a") as file:
+        test_acc = log_validation(
+            dataloader=test_dataloader,
             net=net,
-            readout=readout,
+            readout=probe,
             data=data,
             cat_ind=cat_ind,
             log_file=log_file,
             device=device,
         )
-        with open(log_file, "a") as file:
-            print(
-                "Epoch", epoch, "Loss", np.mean(run_loss), "val_acc", val_acc, file=file
-            )
-        if val_acc > best_val_acc:
-            best_val_acc = val_acc
-            torch.save(net.state_dict(), os.path.join(args.log_dir, "model.pth"))
-            torch.save(readout.state_dict(), os.path.join(args.log_dir, "readout.pth"))
-        if args.debug:
-            break
-        if best_val_acc > 0.999:
-            with open(log_file, "a") as file:
-                print("early stopping", file=file)
-            break
+        print(
+            "Probe 0\n",
+            "test_acc",
+            test_acc,
+            file=file,
+        )
+        adv_test_acc = log_validation(
+            dataloader=adv_test_dataloader,
+            net=net,
+            readout=probe,
+            data=data,
+            cat_ind=cat_ind,
+            log_file=log_file,
+            device=device,
+        )
+        print(
+            f"Probe {noise}\n",
+            "adv_test_acc",
+            adv_test_acc,
+            file=file,
+        )
 
 
 if __name__ == "__main__":
@@ -108,11 +93,13 @@ if __name__ == "__main__":
         "--aug", type=str, default="none", help="Augmentations in train"
     )
     parser.add_argument("--dataset", type=str, default="dsprites", help="Dataset")
+    parser.add_argument("--pretrain", type=str, choices=["supervised", "diet"])
 
     rep = parser.parse_args().rep
     backbone = parser.parse_args().backbone
     aug = parser.parse_args().aug
     dataset = parser.parse_args().dataset
+    pretrain = parser.parse_args().pretrain
 
     settings = []
     print("Running setting:", "rep:", rep, "dataset:", dataset, "backbone:", backbone)
@@ -121,11 +108,18 @@ if __name__ == "__main__":
     args.seed = defaults.SEED + rep
     args.dataset = dataset
     args.model = backbone
-    args.log_dir = os.path.join(
-        defaults.SAVE_PATH, "%s_model_%s_%s_rep_%s" % (dataset, backbone, aug, rep)
-    )
+    args.probe = True  # REQUIRED TO LOG PROBE
 
-    log_file = setup_logging(args)
+    if pretrain == "supervised":
+        args.log_dir = os.path.join(
+            defaults.SAVE_PATH, "%s_model_%s_%s_rep_%s" % (dataset, backbone, aug, rep)
+        )
+    else:
+        args.log_dir = os.path.join(
+            defaults.SAVE_PATH,
+            "diet_%s_model_%s_%s_rep_%s" % (dataset, backbone, aug, rep),
+        )
+
     if torch.cuda.is_available():
         device = torch.device("cuda")
         num_gpus = torch.cuda.device_count()
@@ -138,22 +132,30 @@ if __name__ == "__main__":
         device = torch.device("cpu")
         num_gpus = 0
         print("Using CPU")
-
+    noise = 0
     if args.dataset == "dsprites":
+        noise = 8 / 255
         aug, aug_adv = dsprites_augmentations(aug, 64, adv=4 / 255)
         dataset = defaults.get_data(
             args, DislibDataset, aug=aug, aug_adv=aug_adv, diet_class=None
         )
     elif args.dataset == "smallnorb":
+        noise = 4 / 255
         aug, aug_adv = shapes3d_augmentations(aug, 64, adv=4 / 255)
         dataset = defaults.get_data(
             args, GrayDataset, aug=aug, aug_adv=aug_adv, diet_class=None
         )
-    else:
+    elif args.dataset == "shapes3d":
+        noise = 16 / 255
         aug, aug_adv = shapes3d_augmentations(aug, 64, adv=8 / 255)
         dataset = defaults.get_data(
             args, RGBDataset, aug=aug, aug_adv=aug_adv, diet_class=None
         )
-    if backbone != "image":
-        train(args, dataset, device, log_file)
-    evaluate(args, dataset, device, os.path.join(args.log_dir, "identifiability.txt"))
+    else:
+        noise = 8 / 255
+        aug, aug_adv = shapes3d_augmentations(aug, 64, adv=8 / 255)
+        dataset = defaults.get_data(
+            args, MPI3DDataset, aug=aug, aug_adv=aug_adv, diet_class=None
+        )
+    log_file = os.path.join(args.log_dir, "probe_noise.txt")
+    run_probe(args, dataset, device, log_file, noise)

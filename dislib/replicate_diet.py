@@ -15,6 +15,7 @@ from dataset_processing.augmentations import (
     shapes3d_augmentations,
 )
 from dataset_processing.load_datasets import (
+    DietGrayDataset,
     DietMPI3DDataset,
     DietRGBDataset,
     DislibDataset,
@@ -31,6 +32,7 @@ from torchvision.transforms import v2
 from optimization.scheduler import build_optimizer_and_scheduler
 from dataset_processing.load_datasets import DietDataset
 from evaluation.identifiability import evaluate
+from dataset_processing.load_datasets import GrayDataset
 
 
 def train(args, dataset, device, log_file):
@@ -127,6 +129,11 @@ if __name__ == "__main__":
         aug, aug_adv = dsprites_augmentations(aug, 64, adv=4 / 255)
         dataset = defaults.get_data(
             args, DislibDataset, aug=aug, aug_adv=aug_adv, diet_class=DietDataset
+        )
+    elif args.dataset == "smallnorb":
+        aug, aug_adv = shapes3d_augmentations(aug, 64, adv=4 / 255)
+        dataset = defaults.get_data(
+            args, GrayDataset, aug=aug, aug_adv=aug_adv, diet_class=DietGrayDataset
         )
     elif args.dataset == "shapes3d":
         aug, aug_adv = shapes3d_augmentations(aug, 64, adv=8 / 255)
