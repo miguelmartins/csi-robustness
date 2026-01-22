@@ -91,6 +91,11 @@ if __name__ == "__main__":
         dataset = defaults.get_data(
             args, RGBDataset, aug=aug, aug_adv=aug_adv, diet_class=None
         )
+    elif args.dataset == "cars3d":
+        aug, aug_adv = shapes3d_augmentations(aug, 64, adv=8 / 255)
+        dataset = defaults.get_data(
+            args, RGBDataset, aug=aug, aug_adv=aug_adv, diet_class=None
+        )
     else:
         aug, aug_adv = shapes3d_augmentations(aug, 64, adv=8 / 255)
         dataset = defaults.get_data(

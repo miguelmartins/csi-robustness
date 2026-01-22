@@ -202,6 +202,15 @@ def shapes3d_augmentations(aug, img_size, adv=8 / 255):
             v2.RandomHorizontalFlip(),
             v2.RandomVerticalFlip(),
         ] + get_color_distortion(s=1.0)
+    elif aug == "simclr2dus":
+        augmentations = [
+            v2.RandomResizedCrop(
+                img_size,
+                scale=(0.08, 1.0),
+                interpolation=v2.InterpolationMode.NEAREST,
+            ),
+            v2.RandomVerticalFlip(),
+        ] + get_color_distortion(s=1.0)
     elif aug == "simclr3":
         augmentations = [
             v2.RandomResizedCrop(

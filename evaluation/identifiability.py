@@ -115,9 +115,13 @@ def log_test_evaluation(args, dataset, device, log_file):
             )
 
 
-def evaluate(args, dataset, device, log_file):
+def evaluate(args, dataset, device, log_file, iteration=0):
+    if iteration == 0:
+        file_mode = "w"
+    else:
+        file_mode = "a"
     with open(log_file, "w") as file:
-        print("\n\nEvaluating:", file=file)
+        print(f"\n\nEvaluating {iteration}:", file=file)
     (
         train_dataloader,
         test_dataloader,
