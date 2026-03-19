@@ -84,10 +84,14 @@ if __name__ == "__main__":
 
     log_file = os.path.join(args.log_dir, "pgd.txt")
     if args.dataset == "dsprites":
-        aug, aug_adv = dsprites_augmentations(aug, 64, adv=4 / 255)
+        adv = 4 / 255
+        aug, aug_adv = shapes3d_augmentations(aug, 64, adv=adv)
         dataset = defaults.get_data(
-            args, DislibDataset, aug=aug, aug_adv=aug_adv, diet_class=None
+            args, BeforeAttack, aug=aug, aug_adv=v2.Identity(), diet_class=None
         )
+        evaluate_adversarial(
+            args, dataset, device, log_file, eps=adv
+        )  # TODO: if results weird build BeforeAttack scale false
     elif args.dataset == "smallnorb":
         adv = 4 / 255
         aug, aug_adv = shapes3d_augmentations(aug, 64, adv=adv)
@@ -96,17 +100,23 @@ if __name__ == "__main__":
         )
         evaluate_adversarial(args, dataset, device, log_file, eps=adv)
     elif args.dataset == "shapes3d":
-        aug, aug_adv = shapes3d_augmentations(aug, 64, adv=8 / 255)
+        adv = 8 / 255
+        aug, aug_adv = shapes3d_augmentations(aug, 64, adv=adv)
         dataset = defaults.get_data(
-            args, RGBDataset, aug=aug, aug_adv=aug_adv, diet_class=None
+            args, BeforeAttack, aug=aug, aug_adv=v2.Identity(), diet_class=None
         )
+        evaluate_adversarial(args, dataset, device, log_file, eps=adv, nch=3)
     elif args.dataset == "cars3d":
-        aug, aug_adv = shapes3d_augmentations(aug, 64, adv=8 / 255)
+        adv = 8 / 255
+        aug, aug_adv = shapes3d_augmentations(aug, 64, adv=adv)
         dataset = defaults.get_data(
-            args, RGBDataset, aug=aug, aug_adv=aug_adv, diet_class=None
+            args, BeforeAttack, aug=aug, aug_adv=aug_adv, diet_class=None
         )
+        evaluate_adversarial(args, dataset, device, log_file, eps=adv, nch=3)
     else:
-        aug, aug_adv = shapes3d_augmentations(aug, 64, adv=8 / 255)
+        adv = 8 / 255
+        aug, aug_adv = shapes3d_augmentations(aug, 64, adv=adv)
         dataset = defaults.get_data(
-            args, MPI3DDataset, aug=aug, aug_adv=aug_adv, diet_class=None
-        )
+            args, BeforeAttack, aug=aug, aug_adv=aug_adv, diet_class=None
+        )  # TODO: If results are weird try building new class for MPI3DDataset
+        evaluate_adversarial(args, dataset, device, log_file, eps=adv, nch=3)
