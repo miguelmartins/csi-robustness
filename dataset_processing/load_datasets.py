@@ -75,6 +75,39 @@ class GrayDataset(torch.utils.data.Dataset):
         return x, y
 
 
+class BeforeAttack(torch.utils.data.Dataset):
+    def __init__(
+        self,
+        images,
+        labels,
+        normalize=v2.Normalize(mean=[0.5], std=[0.5]),
+        augmentations=None,
+    ) -> None:
+        super().__init__()
+        self.images = images
+        self.labels = labels
+        self.augmentations = augmentations
+        if augmentations is None:
+            self.transform = v2.Compose(
+                [v2.ToImage(), v2.ToDtype(torch.float32, scale=True)]
+            )
+        else:
+            self.transform = v2.Compose(
+                [v2.ToImage(), v2.ToDtype(torch.float32, scale=True), augmentations]
+            )
+
+    def __len__(self):
+        return len(self.images)
+
+    def __getitem__(self, idx):
+        x = self.images[idx]
+        y = self.labels[idx]
+
+        if self.transform is not None:
+            x = self.transform(x)
+        return x, y
+
+
 # TODO make abstract class that works on all datasets
 class DietDataset(torch.utils.data.Dataset):
     def __init__(
