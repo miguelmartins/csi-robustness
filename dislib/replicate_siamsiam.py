@@ -58,20 +58,20 @@ def train(args, dataset, device, log_file):
     net = SimSiam(backbone=backbone).to(device)
     net.projector.set_layers(2)
 
-    model = torch.nn.Parallel(net)
+    model = torch.nn.DataParallel(net)
     optimizer, scheduler = build_optimizer_and_scheduler_siamsiam(
         net, args.num_epochs, train_dataloader
     )
-    global_progress = tqdm(range(0, args.train.stop_at_epoch), desc=f"Training")
+    global_progress = tqdm(range(0, args.num_epochs), desc=f"Training")
     for epoch in global_progress:
         model.train()
 
         local_progress = tqdm(
             train_dataloader,
-            desc=f"Epoch {epoch}/{args.train.num_epochs}",
-            disable=args.hide_progress,
+            desc=f"Epoch {epoch}/{args.num_epochs}",
+            disable=False,
         )
-        for idx, ((images1, images2), labels) in enumerate(local_progress):
+        for idx, (images1, images2, _) in enumerate(local_progress):
             model.zero_grad()
             data_dict = model.forward(
                 images1.to(device, non_blocking=True),
@@ -114,8 +114,9 @@ if __name__ == "__main__":
     args.dataset = dataset
     args.model = backbone
     args.batch_size = 512
+    args.num_epochs = 800
     args.log_dir = os.path.join(
-        defaults.SAVE_PATH, "diet_%s_model_%s_%s_rep_%s" % (dataset, backbone, aug, rep)
+        defaults.SAVE_PATH, "siam_%s_model_%s_%s_rep_%s" % (dataset, backbone, aug, rep)
     )
 
     log_file = setup_logging(args)
