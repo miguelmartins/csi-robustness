@@ -75,6 +75,54 @@ class GrayDataset(torch.utils.data.Dataset):
         return x, y
 
 
+class ContrastiveDataset(torch.utils.data.Dataset):
+    def __init__(
+        self,
+        images,
+        labels,
+        normalize=v2.Normalize(mean=[0.5], std=[0.5]),
+        augmentations=None,
+        nch=1,
+    ) -> None:
+        super().__init__()
+        self.images = images
+        self.labels = labels
+        self.augmentations = augmentations
+        normalize = v2.Normalize(mean=[0.5] * nch, std=[0.5] * nch)
+        if augmentations is None:
+            self.transform = v2.Compose(
+                [v2.ToImage(), v2.ToDtype(torch.float32, scale=True), normalize]
+            )
+        else:
+            self.transform = v2.Compose(
+                [
+                    v2.ToImage(),
+                    v2.ToDtype(torch.float32, scale=True),
+                    augmentations,
+                    normalize,
+                ]
+            )
+
+    def __len__(self):
+        return len(self.images)
+
+    def __getitem__(self, idx):
+        x = self.images[idx]
+        y = self.labels[idx]
+
+        x_1 = self.transform(x)
+        x_2 = self.transform(x)
+        return x_1, x_2, y
+
+
+class RGBContrastiveDataset(ContrastiveDataset):
+    def __init__(self, images, labels, augmentations=None):
+        # Call the parent constructor and explicitly set nch=3
+        super().__init__(
+            images=images, labels=labels, augmentations=augmentations, nch=3
+        )
+
+
 class BeforeAttack(torch.utils.data.Dataset):
     def __init__(
         self,
@@ -213,12 +261,8 @@ class ContrastiveDislibDataset(torch.utils.data.Dataset):
         x = self.images[idx]
         y = self.labels[idx]
 
-        if self.transform is not None:
-            x_1 = self.transform(x)
-            x_2 = self.transform(x)
-        else:
-            x_1 = x.copy()
-            x_2 = x.copy()
+        x_1 = self.transform(x)
+        x_2 = self.transform(x)
         return x_1, x_2, y
 
 
@@ -259,12 +303,8 @@ class ContrastiveRGBDataset(torch.utils.data.Dataset):
         x = self.images[idx]
         y = self.labels[idx]
 
-        if self.transform is not None:
-            x_1 = self.transform(x)
-            x_2 = self.transform(x)
-        else:
-            x_1 = x.copy()
-            x_2 = x.copy()
+        x_1 = self.transform(x)
+        x_2 = self.transform(x)
         return x_1, x_2, y
 
 
