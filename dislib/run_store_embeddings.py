@@ -14,16 +14,15 @@ import torch
 import torch.nn as nn
 
 from dataset_processing.augmentations import dsprites_augmentations
-from dataset_processing.load_datasets import (
-    BeforeAttack,
-    DislibDataset,
-    MPI3DDataset,
-    RGBDataset,
-)
+from dataset_processing.load_datasets import DislibDataset, MPI3DDataset, RGBDataset
 from tqdm.auto import tqdm
 
-from evaluation.adversarial import evaluate_adversarial
-from evaluation.identifiability import evaluate, log_test_evaluation, log_validation
+from evaluation.identifiability import (
+    evaluate,
+    evaluate_and_save,
+    log_test_evaluation,
+    log_validation,
+)
 from evaluation.logging import Args, setup_logging
 from models.baselines import get_model
 from torchvision.transforms import v2
@@ -44,19 +43,11 @@ if __name__ == "__main__":
     parser.add_argument("--dataset", type=str, default="dsprites", help="Dataset")
     parser.add_argument("--pretrain", type=str, choices=["supervised", "diet"])
 
-    parser.add_argument(
-        "--framework",
-        type=str,
-        default="diet",
-        choices=["diet", "siam"],
-        help="SSL framework",
-    )
     rep = parser.parse_args().rep
     backbone = parser.parse_args().backbone
     aug = parser.parse_args().aug
     dataset = parser.parse_args().dataset
     pretrain = parser.parse_args().pretrain
-    framework = parser.parse_args().framework
 
     settings = []
     print("Running setting:", "rep:", rep, "dataset:", dataset, "backbone:", backbone)
@@ -74,7 +65,7 @@ if __name__ == "__main__":
     else:
         args.log_dir = os.path.join(
             defaults.SAVE_PATH,
-            "%s_%s_model_%s_%s_rep_%s" % (framework, dataset, backbone, aug, rep),
+            "diet_%s_model_%s_%s_rep_%s" % (dataset, backbone, aug, rep),
         )
 
     if torch.cuda.is_available():
@@ -90,41 +81,30 @@ if __name__ == "__main__":
         num_gpus = 0
         print("Using CPU")
 
-    log_file = os.path.join(args.log_dir, "pgd.txt")
     if args.dataset == "dsprites":
-        adv = 4 / 255
-        aug, aug_adv = shapes3d_augmentations(aug, 64, adv=adv)
+        aug, aug_adv = dsprites_augmentations(aug, 64, adv=4 / 255)
         dataset = defaults.get_data(
-            args, BeforeAttack, aug=aug, aug_adv=v2.Identity(), diet_class=None
+            args, DislibDataset, aug=aug, aug_adv=aug_adv, diet_class=None
         )
-        evaluate_adversarial(
-            args, dataset, device, log_file, eps=adv
-        )  # TODO: if results weird build BeforeAttack scale false
     elif args.dataset == "smallnorb":
-        adv = 4 / 255
-        aug, aug_adv = shapes3d_augmentations(aug, 64, adv=adv)
+        aug, aug_adv = shapes3d_augmentations(aug, 64, adv=4 / 255)
         dataset = defaults.get_data(
-            args, BeforeAttack, aug=aug, aug_adv=v2.Identity(), diet_class=None
+            args, GrayDataset, aug=aug, aug_adv=aug_adv, diet_class=None
         )
-        evaluate_adversarial(args, dataset, device, log_file, eps=adv)
     elif args.dataset == "shapes3d":
-        adv = 8 / 255
-        aug, aug_adv = shapes3d_augmentations(aug, 64, adv=adv)
+        aug, aug_adv = shapes3d_augmentations(aug, 64, adv=8 / 255)
         dataset = defaults.get_data(
-            args, BeforeAttack, aug=aug, aug_adv=v2.Identity(), diet_class=None
+            args, RGBDataset, aug=aug, aug_adv=aug_adv, diet_class=None
         )
-        evaluate_adversarial(args, dataset, device, log_file, eps=adv, nch=3)
     elif args.dataset == "cars3d":
-        adv = 8 / 255
-        aug, aug_adv = shapes3d_augmentations(aug, 64, adv=adv)
+        aug, aug_adv = shapes3d_augmentations(aug, 64, adv=8 / 255)
         dataset = defaults.get_data(
-            args, BeforeAttack, aug=aug, aug_adv=aug_adv, diet_class=None
+            args, RGBDataset, aug=aug, aug_adv=aug_adv, diet_class=None
         )
-        evaluate_adversarial(args, dataset, device, log_file, eps=adv, nch=3)
     else:
-        adv = 8 / 255
-        aug, aug_adv = shapes3d_augmentations(aug, 64, adv=adv)
+        aug, aug_adv = shapes3d_augmentations(aug, 64, adv=8 / 255)
         dataset = defaults.get_data(
-            args, BeforeAttack, aug=aug, aug_adv=aug_adv, diet_class=None
-        )  # TODO: If results are weird try building new class for MPI3DDataset
-        evaluate_adversarial(args, dataset, device, log_file, eps=adv, nch=3)
+            args, MPI3DDataset, aug=aug, aug_adv=aug_adv, diet_class=None
+        )
+    log_file = os.path.join(args.log_dir, "embeddings.npz")
+    evaluate_and_save(args, dataset, device, log_file)
