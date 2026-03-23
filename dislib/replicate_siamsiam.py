@@ -101,6 +101,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--aug", type=str, default="none", help="Augmentations in train"
     )
+    parser.add_argument("--ep", type=int, default=800, help="Augmentations in train")
     parser.add_argument("--dataset", type=str, default="dsprites", help="Dataset")
 
     rep = parser.parse_args().rep
@@ -116,7 +117,7 @@ if __name__ == "__main__":
     args.dataset = dataset
     args.model = backbone
     args.batch_size = 512
-    args.num_epochs = 800
+    args.num_epochs = parser.parse_args().ep
     args.log_dir = os.path.join(
         defaults.SAVE_PATH, "siam_%s_model_%s_%s_rep_%s" % (dataset, backbone, aug, rep)
     )

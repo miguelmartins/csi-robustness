@@ -128,7 +128,7 @@ class BeforeAttack(torch.utils.data.Dataset):
         self,
         images,
         labels,
-        normalize=v2.Normalize(mean=[0.5], std=[0.5]),
+        normalize=None,
         resize=None,
         augmentations=None,
     ) -> None:
@@ -162,7 +162,7 @@ class RGBBeforeAttack(BeforeAttack):
         self,
         images,
         labels,
-        normalize=v2.Normalize(mean=[0.5] * 3, std=[0.5] * 3),
+        normalize=None,
         resize=None,
         augmentations=None,
     ):
