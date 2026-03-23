@@ -8,6 +8,9 @@ import torch.nn as nn
 from torchvision.transforms import v2
 from tqdm.auto import tqdm
 from models.baselines import SimSiam
+from transformers import pipeline
+from transformers import AutoImageProcessor, AutoModel
+from transformers.image_utils import load_image
 
 
 def pgd_attack(model, images, labels, eps=8 / 255, alpha=2 / 255, iters=40, nch=1):
@@ -176,6 +179,7 @@ def evaluate_adversarial_hf(
     alpha=2 / 255,
     iters=40,
     nch=1,
+    fm=None,
 ):
     if iteration == 0:
         file_mode = "w"
@@ -192,42 +196,42 @@ def evaluate_adversarial_hf(
         nc,
         cat_ind,
     ) = dataset
-    net = get_model(args.model, nc, out_size, device, args.seed)
-    net.load_state_dict(torch.load(os.path.join(args.log_dir, "model.pth")))
-    net.eval()
+    processor = AutoImageProcessor.from_pretrained(fm)
+    net = AutoModel.from_pretrained(
+        fm,
+        device_map="auto",
+    )
+
     x_train, y_train, x_val, y_val = [], [], [], []
     x_adv, y_adv = [], []
     with torch.no_grad():
         for i, (x, y) in enumerate(train_dataloader):
-            x = x.to(torch.float32).to(device)
-            x = v2.Normalize(mean=[0.5] * nch, std=[0.5] * nch)(x)
+            x = processor(images=x, return_tensors="pt").to(net.device)
             y_train.append(y.to(torch.long).detach().cpu().numpy())
             x_train.append(net(x).detach().cpu().numpy())
             if args.debug:
                 break
         for i, (x, y) in enumerate(test_dataloader):
-            x = x.to(torch.float32).to(device)
-            x = v2.Normalize(mean=[0.5] * nch, std=[0.5] * nch)(x)
+            x = processor(images=x, return_tensors="pt").to(net.device)
             y_val.append(y.to(torch.long).detach().cpu().numpy())
             x_val.append(net(x).detach().cpu().numpy())
     for i, (x, y) in tqdm(enumerate(adv_test_dataloader)):
-        x = x.to(torch.float32).to(device)
+        processor_ = processor(images=x, return_tensors="pt")
+        x = processor(images=x, return_tensors="pt", do_normalize=False).to(net.device)
         x = pgd_attack(
             model=net,
             images=x,
-            labels=y[:, cat_ind].to(torch.long).to(device),
+            labels=y[:, cat_ind].to(torch.long).to(net.device),
             eps=eps,
             alpha=alpha,
             iters=iters,
             nch=nch,
         )
-        x = v2.Normalize(mean=[0.5] * nch, std=[0.5] * nch)(x)
+        x = v2.Normalize(mean=processor_.image_mean, std=processor_.image_std)(x)
         y_adv.append(y.to(torch.long).detach().cpu().numpy())
         x_adv.append(net(x).detach().cpu().numpy())
         if args.debug:
             break
-    x_train = np.concatenate(x_train)
-    y_train = np.concatenate(y_train)
     x_val = np.concatenate(x_val)
     y_val = np.concatenate(y_val)
     x_adv = np.concatenate(x_adv)
