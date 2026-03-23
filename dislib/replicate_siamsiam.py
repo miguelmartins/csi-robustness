@@ -101,7 +101,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--aug", type=str, default="none", help="Augmentations in train"
     )
-    parser.add_argument("--ep", type=int, default=800, help="Augmentations in train")
+    parser.add_argument("--ep", type=int, default=200, help="Augmentations in train")
     parser.add_argument("--dataset", type=str, default="dsprites", help="Dataset")
 
     rep = parser.parse_args().rep
