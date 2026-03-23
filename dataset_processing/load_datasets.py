@@ -138,7 +138,7 @@ class BeforeAttack(torch.utils.data.Dataset):
         self.augmentations = augmentations
         transform_ = [v2.ToImage(), v2.ToDtype(torch.float32, scale=True)]
         if resize is not None:
-            transform_.append(v2.Resize(resize))
+            transform_.append(resize)
         if augmentations is not None:
             transform_.append(augmentations)
         if normalize is not None:

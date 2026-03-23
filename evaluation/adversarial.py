@@ -11,6 +11,7 @@ from models.baselines import SimSiam
 from transformers import pipeline
 from transformers import AutoImageProcessor, AutoModel
 from transformers.image_utils import load_image
+from pathlib import Path
 
 
 def pgd_attack(model, images, labels, eps=8 / 255, alpha=2 / 255, iters=40, nch=1):
@@ -185,6 +186,8 @@ def evaluate_adversarial_hf(
         file_mode = "w"
     else:
         file_mode = "a"
+    log_path = Path(log_file)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
     with open(log_file, "w") as file:
         print(f"\n\nEvaluating {iteration}:", file=file)
     (
@@ -208,16 +211,18 @@ def evaluate_adversarial_hf(
         for i, (x, y) in enumerate(train_dataloader):
             x = processor(images=x, return_tensors="pt").to(net.device)
             y_train.append(y.to(torch.long).detach().cpu().numpy())
-            x_train.append(net(x).detach().cpu().numpy())
+            x_train.append(net(**x).detach().cpu().numpy())
             if args.debug:
                 break
         for i, (x, y) in enumerate(test_dataloader):
             x = processor(images=x, return_tensors="pt").to(net.device)
             y_val.append(y.to(torch.long).detach().cpu().numpy())
-            x_val.append(net(x).detach().cpu().numpy())
+            x_val.append(net(**x).detach().cpu().numpy())
     for i, (x, y) in tqdm(enumerate(adv_test_dataloader)):
         processor_ = processor(images=x, return_tensors="pt")
-        x = processor(images=x, return_tensors="pt", do_normalize=False).to(net.device)
+        x = processor(images=x, return_tensors="pt", do_normalize=False)[
+            "pixel_values"
+        ].to(net.device)
         x = pgd_attack(
             model=net,
             images=x,
@@ -229,9 +234,11 @@ def evaluate_adversarial_hf(
         )
         x = v2.Normalize(mean=processor_.image_mean, std=processor_.image_std)(x)
         y_adv.append(y.to(torch.long).detach().cpu().numpy())
-        x_adv.append(net(x).detach().cpu().numpy())
+        x_adv.append(net(pixel_values=x).detach().cpu().numpy())
         if args.debug:
             break
+    x_train = np.concatenate(x_train)
+    y_train = np.concatenate(y_train)
     x_val = np.concatenate(x_val)
     y_val = np.concatenate(y_val)
     x_adv = np.concatenate(x_adv)

@@ -23,7 +23,7 @@ from dataset_processing.load_datasets import (
 )
 from tqdm.auto import tqdm
 
-from evaluation.adversarial import evaluate_adversarial
+from evaluation.adversarial import evaluate_adversarial, evaluate_adversarial_hf
 from evaluation.identifiability import evaluate, log_test_evaluation, log_validation
 from evaluation.logging import Args, setup_logging
 from models.baselines import get_model
@@ -40,7 +40,7 @@ class ResizeBeforeAttack(BeforeAttack):
         labels,
         normalize=None,
         resize=v2.Resize(
-            size=(256, 256),  # Replace with your target benchmark size
+            size=(224, 224),  # Replace with your target benchmark size
             interpolation=v2.InterpolationMode.BILINEAR,
             antialias=True,
         ),
@@ -63,7 +63,7 @@ class ResizeRGBBeforeAttack(BeforeAttack):
         labels,
         normalize=None,
         resize=v2.Resize(
-            size=(256, 256),  # Replace with your target benchmark size
+            size=(224, 224),  # Replace with your target benchmark size
             interpolation=v2.InterpolationMode.BILINEAR,
             antialias=True,
         ),
@@ -80,7 +80,6 @@ class ResizeRGBBeforeAttack(BeforeAttack):
 
 
 fm_dict = {"v3conv": "facebook/dinov3-convnext-base-pretrain-lvd1689m"}
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Training script LinRep")
     parser.add_argument("--rep", type=int, default=0, help="repetetion")
@@ -99,10 +98,10 @@ if __name__ == "__main__":
     )
     rep = parser.parse_args().rep
     backbone = parser.parse_args().backbone
-    aug = parser.parse_args().aug
     dataset = parser.parse_args().dataset
     pretrain = parser.parse_args().pretrain
     fm = parser.parse_args().fm
+    fm_config = fm_dict[fm]
     settings = []
     print("Running setting:", "rep:", rep, "dataset:", dataset, "backbone:", backbone)
 
@@ -114,12 +113,12 @@ if __name__ == "__main__":
 
     if pretrain == "supervised":
         args.log_dir = os.path.join(
-            defaults.SAVE_PATH, "%s_model_%s_%s_rep_%s" % (dataset, backbone, aug, rep)
+            defaults.SAVE_PATH, "%s_model_%s_rep_%s" % (dataset, backbone, rep)
         )
     else:
         args.log_dir = os.path.join(
             defaults.SAVE_PATH,
-            "%s_%s_model_%s_%s_rep_%s" % (fm, dataset, backbone, aug, rep),
+            "%s_%s_model_%s_rep_%s" % (fm, dataset, backbone, rep),
         )
 
     if torch.cuda.is_available():
@@ -136,14 +135,15 @@ if __name__ == "__main__":
         print("Using CPU")
 
     log_file = os.path.join(args.log_dir, "pgd.txt")
+    aug = "none"
     if args.dataset == "dsprites":
         adv = 4 / 255
         aug, aug_adv = shapes3d_augmentations(aug, 64, adv=adv)
         dataset = defaults.get_data(
             args, ResizeBeforeAttack, aug=aug, aug_adv=v2.Identity(), diet_class=None
         )
-        evaluate_adversarial(
-            args, dataset, device, log_file, eps=adv
+        evaluate_adversarial_hf(
+            args, dataset, device, log_file, eps=adv, fm=fm_config
         )  # TODO: if results weird build BeforeAttack scale false
     elif args.dataset == "smallnorb":
         adv = 4 / 255
@@ -151,25 +151,31 @@ if __name__ == "__main__":
         dataset = defaults.get_data(
             args, ResizeBeforeAttack, aug=aug, aug_adv=v2.Identity(), diet_class=None
         )
-        evaluate_adversarial(args, dataset, device, log_file, eps=adv)
+        evaluate_adversarial_hf(args, dataset, device, log_file, eps=adv, fm=fm_config)
     elif args.dataset == "shapes3d":
         adv = 8 / 255
         aug, aug_adv = shapes3d_augmentations(aug, 64, adv=adv)
         dataset = defaults.get_data(
             args, ResizeRGBBeforeAttack, aug=aug, aug_adv=v2.Identity(), diet_class=None
         )
-        evaluate_adversarial(args, dataset, device, log_file, eps=adv, nch=3)
+        evaluate_adversarial_hf(
+            args, dataset, device, log_file, eps=adv, nch=3, fm=fm_config
+        )
     elif args.dataset == "cars3d":
         adv = 8 / 255
         aug, aug_adv = shapes3d_augmentations(aug, 64, adv=adv)
         dataset = defaults.get_data(
             args, ResizeBeforeAttack, aug=aug, aug_adv=v2.Identity(), diet_class=None
         )
-        evaluate_adversarial(args, dataset, device, log_file, eps=adv, nch=3)
+        evaluate_adversarial_hf(
+            args, dataset, device, log_file, eps=adv, nch=3, fm=fm_config
+        )
     else:
         adv = 8 / 255
         aug, aug_adv = shapes3d_augmentations(aug, 64, adv=adv)
         dataset = defaults.get_data(
             args, ResizeRGBBeforeAttack, aug=aug, aug_adv=v2.Identity(), diet_class=None
         )  # TODO: If results are weird try building new class for MPI3DDataset
-        evaluate_adversarial(args, dataset, device, log_file, eps=adv, nch=3)
+        evaluate_adversarial_hf(
+            args, dataset, device, log_file, eps=adv, nch=3, fm=fm_config
+        )
