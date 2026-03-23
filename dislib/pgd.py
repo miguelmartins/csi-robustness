@@ -101,10 +101,9 @@ if __name__ == "__main__":
             aug=aug,
             aug_adv=v2.Identity(),
             diet_class=None,
-            framework=framework,
         )
         evaluate_adversarial(
-            args, dataset, device, log_file, eps=adv
+            args, dataset, device, log_file, eps=adv, framework=framework
         )  # TODO: if results weird build BeforeAttack scale false
     elif args.dataset == "smallnorb":
         adv = 4 / 255
@@ -115,9 +114,10 @@ if __name__ == "__main__":
             aug=aug,
             aug_adv=v2.Identity(),
             diet_class=None,
-            framework=framework,
         )
-        evaluate_adversarial(args, dataset, device, log_file, eps=adv)
+        evaluate_adversarial(
+            args, dataset, device, log_file, eps=adv, framework=framework
+        )
     elif args.dataset == "shapes3d":
         adv = 8 / 255
         aug, aug_adv = shapes3d_augmentations(aug, 64, adv=adv)
@@ -127,9 +127,10 @@ if __name__ == "__main__":
             aug=aug,
             aug_adv=v2.Identity(),
             diet_class=None,
-            framework=framework,
         )
-        evaluate_adversarial(args, dataset, device, log_file, eps=adv, nch=3)
+        evaluate_adversarial(
+            args, dataset, device, log_file, eps=adv, nch=3, framework=framework
+        )
     elif args.dataset == "cars3d":
         adv = 8 / 255
         aug, aug_adv = shapes3d_augmentations(aug, 64, adv=adv)

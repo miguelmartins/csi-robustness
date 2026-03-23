@@ -186,8 +186,6 @@ def evaluate_adversarial_hf(
         file_mode = "w"
     else:
         file_mode = "a"
-    log_path = Path(log_file)
-    log_path.parent.mkdir(parents=True, exist_ok=True)
     with open(log_file, "w") as file:
         print(f"\n\nEvaluating {iteration}:", file=file)
     (
