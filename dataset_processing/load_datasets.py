@@ -129,20 +129,21 @@ class BeforeAttack(torch.utils.data.Dataset):
         images,
         labels,
         normalize=v2.Normalize(mean=[0.5], std=[0.5]),
+        resize=None,
         augmentations=None,
     ) -> None:
         super().__init__()
         self.images = images
         self.labels = labels
         self.augmentations = augmentations
-        if augmentations is None:
-            self.transform = v2.Compose(
-                [v2.ToImage(), v2.ToDtype(torch.float32, scale=True)]
-            )
-        else:
-            self.transform = v2.Compose(
-                [v2.ToImage(), v2.ToDtype(torch.float32, scale=True), augmentations]
-            )
+        transform_ = [v2.ToImage(), v2.ToDtype(torch.float32, scale=True)]
+        if resize is not None:
+            transform_.append(v2.Resize(resize))
+        if augmentations is not None:
+            transform_.append(augmentations)
+        if normalize is not None:
+            transform_.append(normalize)
+        self.transform = v2.Compose(transform_)
 
     def __len__(self):
         return len(self.images)
@@ -154,6 +155,25 @@ class BeforeAttack(torch.utils.data.Dataset):
         if self.transform is not None:
             x = self.transform(x)
         return x, y
+
+
+class RGBBeforeAttack(BeforeAttack):
+    def __init__(
+        self,
+        images,
+        labels,
+        normalize=v2.Normalize(mean=[0.5] * 3, std=[0.5] * 3),
+        resize=None,
+        augmentations=None,
+    ):
+        # Call the parent constructor and explicitly set nch=3
+        super().__init__(
+            images=images,
+            labels=labels,
+            normalize=normalize,
+            resize=resize,
+            augmentations=augmentations,
+        )
 
 
 # TODO make abstract class that works on all datasets

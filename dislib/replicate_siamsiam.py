@@ -116,7 +116,7 @@ if __name__ == "__main__":
     args.dataset = dataset
     args.model = backbone
     args.batch_size = 512
-    args.num_epochs = 100
+    args.num_epochs = 800
     args.log_dir = os.path.join(
         defaults.SAVE_PATH, "siam_%s_model_%s_%s_rep_%s" % (dataset, backbone, aug, rep)
     )
