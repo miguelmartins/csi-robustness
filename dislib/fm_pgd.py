@@ -110,6 +110,7 @@ if __name__ == "__main__":
     args.dataset = dataset
     args.model = backbone
     args.probe = True  # REQUIRED TO LOG PROBE
+    args.batch_size = 32
 
     if pretrain == "supervised":
         args.log_dir = os.path.join(

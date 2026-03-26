@@ -119,7 +119,8 @@ if __name__ == "__main__":
     args.batch_size = 512
     args.num_epochs = parser.parse_args().ep
     args.log_dir = os.path.join(
-        defaults.SAVE_PATH, "siam_%s_model_%s_%s_rep_%s" % (dataset, backbone, aug, rep)
+        f"{defaults.SAVE_PATH}_{args.num_epochs}",
+        "siam_%s_model_%s_%s_rep_%s" % (dataset, backbone, aug, rep),
     )
 
     log_file = setup_logging(args)

@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import os
+import pathlib
 from scipy.stats import pearsonr as corr
 from models.baselines import get_model
 import torch
@@ -11,10 +12,11 @@ from models.baselines import SimSiam
 from transformers import pipeline
 from transformers import AutoImageProcessor, AutoModel
 from transformers.image_utils import load_image
-from pathlib import Path
 
 
-def pgd_attack(model, images, labels, eps=8 / 255, alpha=2 / 255, iters=40, nch=1):
+def pgd_attack(
+    model, images, labels, eps=8 / 255, alpha=2 / 255, iters=40, nch=1, fm=False
+):
     """
     Executes a Projected Gradient Descent (PGD) attack on a batch of images.
 
@@ -43,7 +45,10 @@ def pgd_attack(model, images, labels, eps=8 / 255, alpha=2 / 255, iters=40, nch=
         x_adv.requires_grad = True
 
         # 1. Forward pass
+
         outputs = model(x_adv)
+        if fm is True:
+            outputs = outputs.pooler_output
         model.zero_grad()
         loss = loss_fn(outputs, labels)
 
@@ -182,6 +187,10 @@ def evaluate_adversarial_hf(
     nch=1,
     fm=None,
 ):
+    # 1. Create the parent directory if it doesn't exist
+    # parents=True creates nested folders; exist_ok=True prevents errors if it's already there
+    pathlib.Path(log_file).parent.mkdir(parents=True, exist_ok=True)
+
     if iteration == 0:
         file_mode = "w"
     else:
@@ -202,22 +211,25 @@ def evaluate_adversarial_hf(
         fm,
         device_map="auto",
     )
+    net.eval()
 
     x_train, y_train, x_val, y_val = [], [], [], []
     x_adv, y_adv = [], []
     with torch.no_grad():
-        for i, (x, y) in enumerate(train_dataloader):
+        for i, (x, y) in tqdm(
+            enumerate(train_dataloader), desc="Extracting Train Features"
+        ):
             x = processor(images=x, return_tensors="pt").to(net.device)
             y_train.append(y.to(torch.long).detach().cpu().numpy())
-            x_train.append(net(**x).detach().cpu().numpy())
-            if args.debug:
-                break
-        for i, (x, y) in enumerate(test_dataloader):
+            x_train.append(net(**x).pooler_output.detach().cpu().numpy())
+        for i, (x, y) in tqdm(
+            enumerate(test_dataloader), desc="Extracting Val Features"
+        ):
             x = processor(images=x, return_tensors="pt").to(net.device)
             y_val.append(y.to(torch.long).detach().cpu().numpy())
-            x_val.append(net(**x).detach().cpu().numpy())
-    for i, (x, y) in tqdm(enumerate(adv_test_dataloader)):
-        processor_ = processor(images=x, return_tensors="pt")
+            x_val.append(net(**x).pooler_output.detach().cpu().numpy())
+
+    for i, (x, y) in tqdm(enumerate(adv_test_dataloader), desc="Adversarial Attack"):
         x = processor(images=x, return_tensors="pt", do_normalize=False)[
             "pixel_values"
         ].to(net.device)
@@ -229,12 +241,13 @@ def evaluate_adversarial_hf(
             alpha=alpha,
             iters=iters,
             nch=nch,
+            fm=True,
         )
-        x = v2.Normalize(mean=processor_.image_mean, std=processor_.image_std)(x)
+        x = v2.Normalize(mean=processor.image_mean, std=processor.image_std)(x)
         y_adv.append(y.to(torch.long).detach().cpu().numpy())
-        x_adv.append(net(pixel_values=x).detach().cpu().numpy())
-        if args.debug:
-            break
+        with torch.no_grad():
+            adv_ = net(pixel_values=x).pooler_output.detach().cpu().numpy()
+        x_adv.append(adv_)
     x_train = np.concatenate(x_train)
     y_train = np.concatenate(y_train)
     x_val = np.concatenate(x_val)

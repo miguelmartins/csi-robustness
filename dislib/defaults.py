@@ -131,9 +131,9 @@ def get_data(args, dataset_class, aug, aug_adv, diet_class=None):
         train_data,
         batch_size=args.batch_size,
         shuffle=True,
-        multiprocessing_context="fork",
-        prefetch_factor=4,
-        persistent_workers=True,
+        # multiprocessing_context="fork", # <-- REMOVED
+        prefetch_factor=2,  # <-- REDUCED
+        persistent_workers=True,  # <-- DISABLED FOR DEBUGGING
         num_workers=8,
         drop_last=True,
     )
@@ -142,9 +142,9 @@ def get_data(args, dataset_class, aug, aug_adv, diet_class=None):
         test_data,
         batch_size=args.batch_size,
         shuffle=False,
-        multiprocessing_context="fork",
-        prefetch_factor=4,
-        persistent_workers=True,
+        # multiprocessing_context="fork", # <-- REMOVED
+        prefetch_factor=2,  # <-- REDUCED
+        persistent_workers=True,  # <-- DISABLED FOR DEBUGGING
         num_workers=8,
         drop_last=False,
     )
@@ -152,9 +152,9 @@ def get_data(args, dataset_class, aug, aug_adv, diet_class=None):
         adv_test_data,
         batch_size=args.batch_size,
         shuffle=False,
-        multiprocessing_context="fork",
-        prefetch_factor=4,
-        persistent_workers=True,
+        # multiprocessing_context="fork", # <-- REMOVED
+        prefetch_factor=2,  # <-- REDUCED
+        persistent_workers=True,  # <-- DISABLED FOR DEBUGGING
         num_workers=8,
         drop_last=False,
     )
