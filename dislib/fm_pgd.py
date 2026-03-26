@@ -141,7 +141,11 @@ if __name__ == "__main__":
         adv = 4 / 255
         aug, aug_adv = shapes3d_augmentations(aug, 64, adv=adv)
         dataset = defaults.get_data(
-            args, ResizeBeforeAttack, aug=aug, aug_adv=v2.Identity(), diet_class=None
+            args,
+            ResizeBeforeAttack,
+            aug=v2.Grayscale(num_output_channels=3),
+            aug_adv=v2.Grayscale(num_output_channels=3),
+            diet_class=None,
         )
         evaluate_adversarial_hf(
             args, dataset, device, log_file, eps=adv, fm=fm_config
@@ -150,9 +154,15 @@ if __name__ == "__main__":
         adv = 4 / 255
         aug, aug_adv = shapes3d_augmentations(aug, 64, adv=adv)
         dataset = defaults.get_data(
-            args, ResizeBeforeAttack, aug=aug, aug_adv=v2.Identity(), diet_class=None
+            args,
+            ResizeBeforeAttack,
+            aug=v2.Grayscale(num_output_channels=3),
+            aug_adv=v2.Grayscale(num_output_channels=3),
+            diet_class=None,
         )
-        evaluate_adversarial_hf(args, dataset, device, log_file, eps=adv, fm=fm_config)
+        evaluate_adversarial_hf(
+            args, dataset, device, log_file, eps=adv, nch=3, fm=fm_config
+        )
     elif args.dataset == "shapes3d":
         adv = 8 / 255
         aug, aug_adv = shapes3d_augmentations(aug, 64, adv=adv)
