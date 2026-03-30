@@ -13,6 +13,7 @@ import os
 import torch
 import torch.nn as nn
 
+torch.multiprocessing.set_sharing_strategy("file_system")
 from dataset_processing.augmentations import dsprites_augmentations
 from dataset_processing.load_datasets import (
     BeforeAttack,
@@ -79,7 +80,11 @@ class ResizeRGBBeforeAttack(BeforeAttack):
         )
 
 
-fm_dict = {"v3conv": "facebook/dinov3-convnext-base-pretrain-lvd1689m"}
+fm_dict = {
+    "v3conv": "facebook/dinov3-convnext-base-pretrain-lvd1689m",
+    "v3vit": "facebook/dinov3-vit7b16-pretrain-lvd1689m",
+    "v2vit": "facebook/dinov2-base",
+}
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Training script LinRep")
     parser.add_argument("--rep", type=int, default=0, help="repetetion")
@@ -93,7 +98,7 @@ if __name__ == "__main__":
         "--fm",
         type=str,
         default="v3conv",
-        choices=["v3conv"],
+        choices=list(fm_dict.keys()),
         help="Foundational model",
     )
     rep = parser.parse_args().rep
