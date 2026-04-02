@@ -26,7 +26,7 @@ from dataset_processing.load_datasets import (
 )
 from tqdm.auto import tqdm
 
-from evaluation.adversarial import evaluate_adversarial, evaluate_adversarial_hf
+from evaluation.adversarial import evaluate_adversarial, compute_embeddings_fm
 from evaluation.identifiability import evaluate, log_test_evaluation, log_validation
 from evaluation.logging import Args, setup_logging
 from models.baselines import get_model
@@ -64,7 +64,9 @@ if __name__ == "__main__":
     fm = parser.parse_args().fm
     fm_config = fm_dict[fm]
     settings = []
-    print("Running setting:", "rep:", rep, "dataset:", dataset, "backbone:", backbone)
+    print(
+        "Precomputing setting:", "rep:", rep, "dataset:", dataset, "backbone:", backbone
+    )
 
     args = Args()
     args.seed = defaults.SEED + rep
@@ -103,13 +105,13 @@ if __name__ == "__main__":
         aug, aug_adv = shapes3d_augmentations(aug, 64, adv=adv)
         dataset = defaults.get_data(
             args,
-            ResizeBeforeAttack,
-            aug=v2.Grayscale(num_output_channels=3),
-            aug_adv=v2.Grayscale(num_output_channels=3),
+            ResizeRGBBeforeAttack,
+            aug=v2.Compose([aug, v2.Grayscale(num_output_channels=3)]),
+            aug_adv=v2.Identity(),
             diet_class=None,
         )
-        evaluate_adversarial_hf(
-            args, dataset, device, log_file, eps=adv, fm=fm_config
+        compute_embeddings_fm(
+            args, dataset, device, nch=3, fm=fm_config
         )  # TODO: if results weird build BeforeAttack scale false
     elif args.dataset == "smallnorb":
         adv = 4 / 255
@@ -117,37 +119,29 @@ if __name__ == "__main__":
         dataset = defaults.get_data(
             args,
             ResizeRGBBeforeAttack,
-            aug=v2.Grayscale(num_output_channels=3),
-            aug_adv=v2.Grayscale(num_output_channels=3),
+            aug=v2.Compose([aug, v2.Grayscale(num_output_channels=3)]),
+            aug_adv=v2.Identity(),
             diet_class=None,
         )
-        evaluate_adversarial_hf(
-            args, dataset, device, log_file, eps=adv, nch=3, fm=fm_config
-        )
+        compute_embeddings_fm(args, dataset, device, nch=3, fm=fm_config)
     elif args.dataset == "shapes3d":
         adv = 8 / 255
         aug, aug_adv = shapes3d_augmentations(aug, 64, adv=adv)
         dataset = defaults.get_data(
             args, ResizeRGBBeforeAttack, aug=aug, aug_adv=v2.Identity(), diet_class=None
         )
-        evaluate_adversarial_hf(
-            args, dataset, device, log_file, eps=adv, nch=3, fm=fm_config
-        )
+        compute_embeddings_fm(args, dataset, device, nch=3, fm=fm_config)
     elif args.dataset == "cars3d":
         adv = 8 / 255
         aug, aug_adv = shapes3d_augmentations(aug, 64, adv=adv)
         dataset = defaults.get_data(
             args, ResizeRGBBeforeAttack, aug=aug, aug_adv=v2.Identity(), diet_class=None
         )
-        evaluate_adversarial_hf(
-            args, dataset, device, log_file, eps=adv, nch=3, fm=fm_config
-        )
+        compute_embeddings_fm(args, dataset, device, nch=3, fm=fm_config)
     else:
         adv = 8 / 255
         aug, aug_adv = shapes3d_augmentations(aug, 64, adv=adv)
         dataset = defaults.get_data(
             args, ResizeRGBBeforeAttack, aug=aug, aug_adv=v2.Identity(), diet_class=None
         )  # TODO: If results are weird try building new class for MPI3DDataset
-        evaluate_adversarial_hf(
-            args, dataset, device, log_file, eps=adv, nch=3, fm=fm_config
-        )
+        compute_embeddings_fm(args, dataset, device, nch=3, fm=fm_config)
