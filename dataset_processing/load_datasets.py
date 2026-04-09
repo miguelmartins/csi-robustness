@@ -131,12 +131,13 @@ class BeforeAttack(torch.utils.data.Dataset):
         normalize=None,
         resize=None,
         augmentations=None,
+        scale=True,
     ) -> None:
         super().__init__()
         self.images = images
         self.labels = labels
         self.augmentations = augmentations
-        transform_ = [v2.ToImage(), v2.ToDtype(torch.float32, scale=True)]
+        transform_ = [v2.ToImage(), v2.ToDtype(torch.float32, scale=scale)]
         if resize is not None:
             transform_.append(resize)
         if augmentations is not None:
@@ -155,6 +156,26 @@ class BeforeAttack(torch.utils.data.Dataset):
         if self.transform is not None:
             x = self.transform(x)
         return x, y
+
+
+class DislibBeforeAttack(BeforeAttack):
+    def __init__(
+        self,
+        images,
+        labels,
+        normalize=None,
+        resize=None,
+        augmentations=None,
+    ) -> None:
+        # Calls BeforeAttack without scaling between 0 and 1. Creates issues in dislib for some reason.
+        super().__init__(
+            images=images,
+            labels=labels,
+            normalize=normalize,
+            resize=resize,
+            augmentations=augmentations,
+            scale=False,
+        )
 
 
 class ResizeBeforeAttack(BeforeAttack):

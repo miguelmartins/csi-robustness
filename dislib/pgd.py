@@ -16,6 +16,7 @@ import torch.nn as nn
 from dataset_processing.augmentations import dsprites_augmentations
 from dataset_processing.load_datasets import (
     BeforeAttack,
+    DislibBeforeAttack,
     DislibDataset,
     MPI3DDataset,
     RGBDataset,
@@ -109,7 +110,7 @@ if __name__ == "__main__":
         aug, aug_adv = shapes3d_augmentations(aug, 64, adv=adv)
         dataset = defaults.get_data(
             args,
-            BeforeAttack,
+            DislibBeforeAttack,
             aug=aug,
             aug_adv=v2.Identity(),
             diet_class=None,
