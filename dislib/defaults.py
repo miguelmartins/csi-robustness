@@ -54,6 +54,30 @@ sys.path.append("/home/miguelmartins/Projects/disentangling-correlated-factors")
 from datasets.utils import get_dataset
 
 
+def get_target(args, target_idx, target_type="categorical"):
+    if args.dataset == "dsprites":
+        data = get_dataset(args.dataset)(
+            subset=1,
+            root=os.path.join(DATA_DIR, args.dataset),
+            factors_to_use=["shape", "scale", "orientation", "posX", "posY"],
+        )
+    else:
+        data = get_dataset(args.dataset)(
+            subset=1, root=os.path.join(DATA_DIR, args.dataset)
+        )
+    if target_type == "categorical":
+        cat = categorical[args.dataset][target_idx]
+    elif target_type == "conitnuous":
+        cat = continuous[args.dataset][target_idx]
+    elif target_type == "manifold":
+        cat = manifold[args.dataset][target_idx]
+    elif target_type == "continuous":
+        cat = continuous[args.dataset][target_idx]
+    else:
+        cat = other[args.dataset][target_idx]
+    return [j for j, item in enumerate(data.lat_names) if item == cat][0]
+
+
 def get_data(args, dataset_class, aug, aug_adv, diet_class=None):
     print("Loading:", args.dataset)
     if args.dataset == "dsprites":

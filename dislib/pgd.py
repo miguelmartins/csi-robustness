@@ -18,7 +18,6 @@ from dataset_processing.load_datasets import (
     BeforeAttack,
     DislibDataset,
     MPI3DDataset,
-    RGBBeforeAttack,
     RGBDataset,
 )
 from tqdm.auto import tqdm
@@ -52,12 +51,24 @@ if __name__ == "__main__":
         choices=["diet", "siam"],
         help="SSL framework",
     )
+    parser.add_argument(
+        "--target",
+        type=str,
+        default="categorical",
+        choices=["categorical", "continuous", "manifold", "other"],
+        help="Choose other target variables for PGD attack",
+    )
+    parser.add_argument(
+        "--target_idx", type=int, default=0, help="Index of type of latent variable"
+    )
     rep = parser.parse_args().rep
     backbone = parser.parse_args().backbone
     aug = parser.parse_args().aug
     dataset = parser.parse_args().dataset
     pretrain = parser.parse_args().pretrain
     framework = parser.parse_args().framework
+    target = parser.parse_args().target
+    target_idx = parser.parse_args().target_idx
 
     settings = []
     print("Running setting:", "rep:", rep, "dataset:", dataset, "backbone:", backbone)
@@ -91,7 +102,8 @@ if __name__ == "__main__":
         num_gpus = 0
         print("Using CPU")
 
-    log_file = os.path.join(args.log_dir, "pgd.txt")
+    log_file = os.path.join(args.log_dir, f"pgd_{target}_{target_idx}.txt")
+    target_idx = defaults.get_target(args, target_idx=target_idx, target_type=target)
     if args.dataset == "dsprites":
         adv = 4 / 255
         aug, aug_adv = shapes3d_augmentations(aug, 64, adv=adv)
@@ -103,7 +115,13 @@ if __name__ == "__main__":
             diet_class=None,
         )
         evaluate_adversarial(
-            args, dataset, device, log_file, eps=adv, framework=framework
+            args,
+            dataset,
+            device,
+            log_file,
+            eps=adv,
+            framework=framework,
+            idx=target_idx,
         )  # TODO: if results weird build BeforeAttack scale false
     elif args.dataset == "smallnorb":
         adv = 4 / 255
@@ -116,36 +134,71 @@ if __name__ == "__main__":
             diet_class=None,
         )
         evaluate_adversarial(
-            args, dataset, device, log_file, eps=adv, framework=framework
+            args,
+            dataset,
+            device,
+            log_file,
+            eps=adv,
+            framework=framework,
+            idx=target_idx,
         )
     elif args.dataset == "shapes3d":
         adv = 8 / 255
         aug, aug_adv = shapes3d_augmentations(aug, 64, adv=adv)
         dataset = defaults.get_data(
             args,
-            RGBBeforeAttack,
+            BeforeAttack,
             aug=aug,
             aug_adv=v2.Identity(),
             diet_class=None,
         )
         evaluate_adversarial(
-            args, dataset, device, log_file, eps=adv, nch=3, framework=framework
+            args,
+            dataset,
+            device,
+            log_file,
+            eps=adv,
+            nch=3,
+            framework=framework,
+            idx=target_idx,
         )
     elif args.dataset == "cars3d":
         adv = 8 / 255
         aug, aug_adv = shapes3d_augmentations(aug, 64, adv=adv)
         dataset = defaults.get_data(
-            args, BeforeAttack, aug=aug, aug_adv=v2.Identity(), diet_class=None
+            args,
+            BeforeAttack,
+            aug=aug,
+            aug_adv=v2.Identity(),
+            diet_class=None,
         )
         evaluate_adversarial(
-            args, dataset, device, log_file, eps=adv, nch=3, framework=framework
+            args,
+            dataset,
+            device,
+            log_file,
+            eps=adv,
+            nch=3,
+            framework=framework,
+            idx=target_idx,
         )
     else:
         adv = 8 / 255
         aug, aug_adv = shapes3d_augmentations(aug, 64, adv=adv)
         dataset = defaults.get_data(
-            args, RGBBeforeAttack, aug=aug, aug_adv=v2.Identity(), diet_class=None
+            args,
+            BeforeAttack,
+            aug=aug,
+            aug_adv=v2.Identity(),
+            diet_class=None,
         )  # TODO: If results are weird try building new class for MPI3DDataset
         evaluate_adversarial(
-            args, dataset, device, log_file, eps=adv, nch=3, framework=framework
+            args,
+            dataset,
+            device,
+            log_file,
+            eps=adv,
+            nch=3,
+            framework=framework,
+            idx=target_idx,
         )

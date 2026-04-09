@@ -138,6 +138,7 @@ def evaluate_adversarial(
     iters=40,
     nch=1,
     framework="diet",
+    idx=None,
 ):
     if iteration == 0:
         file_mode = "w"
@@ -154,6 +155,9 @@ def evaluate_adversarial(
         nc,
         cat_ind,
     ) = dataset
+    if idx is None:
+        idx = cat_ind
+
     net = get_model(args.model, nc, out_size, device, args.seed)
     checkpoint_path = os.path.join(args.log_dir, "model.pth")
     state_dict = torch.load(checkpoint_path, map_location=device)
@@ -187,7 +191,7 @@ def evaluate_adversarial(
         x = pgd_attack(
             model=net,
             images=x,
-            labels=y[:, cat_ind].to(torch.long).to(device),
+            labels=y[:, idx].to(torch.long).to(device),
             eps=eps,
             alpha=alpha,
             iters=iters,
@@ -346,7 +350,7 @@ def evaluate_adversarial_hf(
         x = pgd_attack_norm(
             model=net,
             images=x,
-            labels=y[:, cat_ind].to(torch.long).to(net.device),
+            labels=y[:, idx].to(torch.long).to(net.device),
             eps=eps,
             alpha=alpha,
             iters=iters,

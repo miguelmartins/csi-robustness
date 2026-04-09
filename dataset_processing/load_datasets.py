@@ -180,48 +180,6 @@ class ResizeBeforeAttack(BeforeAttack):
         )
 
 
-class ResizeRGBBeforeAttack(BeforeAttack):
-    def __init__(
-        self,
-        images,
-        labels,
-        normalize=None,
-        resize=v2.Resize(
-            size=(224, 224),  # Replace with your target benchmark size
-            interpolation=v2.InterpolationMode.BILINEAR,
-            antialias=True,
-        ),
-        augmentations=None,
-    ):
-        # Call the parent constructor and explicitly set nch=3
-        super().__init__(
-            images=images,
-            labels=labels,
-            normalize=normalize,
-            resize=resize,
-            augmentations=augmentations,
-        )
-
-
-class RGBBeforeAttack(BeforeAttack):
-    def __init__(
-        self,
-        images,
-        labels,
-        normalize=None,
-        resize=None,
-        augmentations=None,
-    ):
-        # Call the parent constructor and explicitly set nch=3
-        super().__init__(
-            images=images,
-            labels=labels,
-            normalize=normalize,
-            resize=resize,
-            augmentations=augmentations,
-        )
-
-
 # TODO make abstract class that works on all datasets
 class DietDataset(torch.utils.data.Dataset):
     def __init__(
