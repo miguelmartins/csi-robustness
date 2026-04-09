@@ -97,7 +97,7 @@ def pgd_attack_norm(
         # If mean/std are provided, apply them here
         if mean is not None and std is not None:
             # Reshape mean/std for broadcasting [1, C, 1, 1]
-            x_input = v2.Normalize(mean=mean, std=std)
+            x_input = v2.Normalize(mean=mean, std=std)(x_adv)
         else:
             x_input = x_adv
 
@@ -330,7 +330,7 @@ def evaluate_adversarial_hf(
         device_map="auto",
     )
     net.eval()
-    embeddings = np.load(os.path.join(args.log_file, "embeddings.npz"))
+    embeddings = np.load(os.path.join(args.log_dir, "embeddings.npz"))
     x_train = embeddings["x_train"]
     y_train = embeddings["y_train"]
     x_val = embeddings["x_val"]
