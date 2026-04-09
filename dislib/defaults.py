@@ -67,11 +67,11 @@ def get_target(args, target_idx, target_type="categorical"):
         )
     if target_type == "categorical":
         cat = categorical[args.dataset][target_idx]
-    elif target_type == "conitnuous":
+    elif target_type == "continuous":
         cat = continuous[args.dataset][target_idx]
     elif target_type == "manifold":
         cat = manifold[args.dataset][target_idx]
-    elif target_type == "continuous":
+    elif target_type == "other":
         cat = continuous[args.dataset][target_idx]
     else:
         cat = other[args.dataset][target_idx]
